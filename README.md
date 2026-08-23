@@ -6,7 +6,7 @@
 loadstring(game:HttpGet("https://raw.githubusercontent.com/fungamer1234/voidz-cali-shootout/main/VOIDZ_LOAD.lua"))()
 ```
 
-Build: `2026-08-23-1.5.3` · Key: `VOIDZHUB` (unlocks everything)
+Build: `2026-08-23-1.5.4` · Key: `VOIDZHUB` (unlocks everything)
 
 MacSploit: UI parents to **PlayerGui**. Do **not** pass `true` as a second argument to `HttpGet`.
 
@@ -40,6 +40,10 @@ Combat God keeps your **server position** in a green safe zone (spawn shield) wh
 | Misc | Anti-AFK, rejoin, server hop, unload |
 
 Merged from public Cali hubs (Express/_scripts autofarm list, Teeksaw TPs, YNC locations, MikeyHub/Airflow combat). The Luarmor copy of Express Hub is locked; this is a VOIDZ rebuild of those options so they actually run keyless.
+
+## Recent (1.5.4) — camera, guns, keybinds
+
+Combat God no longer parks your body in a green zone (that froze the camera). Rapid fire uses Activate + remotes + click. Misc has remappable keybinds (G god, F fly, N noclip, K ESP, H car fly, T third person).
 
 ## Recent (1.5.3) — 200 local register limit
 

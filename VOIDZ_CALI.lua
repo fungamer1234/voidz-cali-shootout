@@ -1,6 +1,6 @@
 --[[
   VOIDZ HUB — Cali Shootout
-  Build 2026-08-23-1.5.3  |  Key: VOIDZHUB  |  RightShift toggle
+  Build 2026-08-23-1.5.4  |  Key: VOIDZHUB  |  RightShift toggle
   Places: 12077443856 (main) + 16940099758 (Voice Chat)
 ]]
 
@@ -23,7 +23,7 @@ local Mouse = LP:GetMouse()
 local Camera = Workspace.CurrentCamera
 
 local HUB_NAME = "VOIDZ"
-local BUILD = "2026-08-23-1.5.3"
+local BUILD = "2026-08-23-1.5.4"
 print("[VOIDZ CALI] booting " .. BUILD)
 warn("[VOIDZ CALI] booting " .. BUILD)
 task.spawn(function()
@@ -102,6 +102,17 @@ local S = {
 	carSpeed = 220,
 	carFlySpeed = 110,
 	godCF = nil,
+	toggleUI = {},
+	bindListen = nil,
+	binds = {
+		menu = Enum.KeyCode.RightShift,
+		combatGod = Enum.KeyCode.G,
+		fly = Enum.KeyCode.F,
+		noclip = Enum.KeyCode.N,
+		esp = Enum.KeyCode.K,
+		carFly = Enum.KeyCode.H,
+		thirdPerson = Enum.KeyCode.T,
+	},
 }
 
 local function tw(o, props, t)
@@ -617,20 +628,11 @@ local function applyCombatGod(h, c)
 	markSafeFlags(c)
 end
 
-local function parkInSafeZone(r)
-	if not r then return end
-	local zcf = nearestZoneCF()
-	pcall(function()
-		r.CFrame = zcf
-		r.AssemblyLinearVelocity = Vector3.zero
-		r.AssemblyAngularVelocity = Vector3.zero
-	end)
-end
-
 local function setCombatGod(on)
 	S.toggles.combatGod = on == true
 	dropConn("combatGodHB")
 	dropConn("combatGodStep")
+	dropConn("combatGodCam")
 	dropConn("combatGodZone")
 	dropConn("combatGodDied")
 	pcall(function() RunService:UnbindFromRenderStep("VOIDZGOD") end)
@@ -644,66 +646,45 @@ local function setCombatGod(on)
 	local r0 = hrp()
 	godVis = r0 and r0.CFrame
 	spoofSafeZones()
-	notify(HUB_NAME, "Combat God ON — parked in a green zone on the server", 2.4)
+	notify(HUB_NAME, "Combat God ON — shield + snap-back (camera stays on you)", 2.2)
 	applyCombatGod(hum(), char())
 	local h = hum()
 	if h then
 		addConn("combatGodDied", h.Died:Connect(function()
 			if not S.toggles.combatGod then return end
-			S.godCF = godVis or (hrp() and hrp().CFrame)
+			S.godCF = hrp() and hrp().CFrame
 		end))
 	end
 	if not S._godCharHook then
 		S._godCharHook = true
 		LP.CharacterAdded:Connect(function(c)
 			if not S.toggles.combatGod then return end
+			local cf = S.godCF
 			task.defer(function()
 				local r = c:WaitForChild("HumanoidRootPart", 4)
 				local nh = c:WaitForChild("Humanoid", 4)
-				godVis = S.godCF or (r and r.CFrame)
+				if cf and r then pcall(function() r.CFrame = cf end) end
 				applyCombatGod(nh, c)
 				spoofSafeZones()
 			end)
 		end)
 	end
-	addConn("combatGodStep", RunService.Stepped:Connect(function()
-		if not S.toggles.combatGod then return end
-		parkInSafeZone(hrp())
-		keepToolEquipped(char())
-		applyCombatGod(hum(), char())
-	end))
 	addConn("combatGodHB", RunService.Heartbeat:Connect(function()
 		if not S.toggles.combatGod then return end
-		parkInSafeZone(hrp())
-	end))
-	pcall(function()
-		RunService:BindToRenderStep("VOIDZGOD", Enum.RenderPriority.Last.Value, function(dt)
-			if not S.toggles.combatGod then return end
-			local r = hrp()
-			local hh = hum()
-			if not r then return end
-			if not godVis then godVis = r.CFrame end
-			dt = math.clamp(dt or 1 / 60, 0, 0.05)
-			local md = hh and hh.MoveDirection or Vector3.zero
-			local spd = hh and math.max(hh.WalkSpeed, 16) or 16
-			local pos = godVis.Position + md * spd * dt
-			local lv = Camera.CFrame.LookVector
-			local look = Vector3.new(lv.X, 0, lv.Z)
-			if look.Magnitude > 0.08 then
-				godVis = CFrame.new(pos, pos + look.Unit)
-			else
-				godVis = CFrame.new(pos) * (godVis - godVis.Position)
-			end
-			S.godCF = godVis
-			r.CFrame = godVis
-		end)
-	end)
-	local lastSpoof = 0
-	addConn("combatGodZone", RunService.Heartbeat:Connect(function()
-		if not S.toggles.combatGod then return end
-		if tick() - lastSpoof < 0.15 then return end
-		lastSpoof = tick()
+		if hrp() then S.godCF = hrp().CFrame end
+		applyCombatGod(hum(), char())
 		spoofSafeZones()
+	end))
+	addConn("combatGodCam", RunService.RenderStepped:Connect(function()
+		if not S.toggles.combatGod then return end
+		local cam = Workspace.CurrentCamera
+		local hh = hum()
+		if cam and hh and cam.CameraSubject ~= hh then
+			pcall(function() cam.CameraSubject = hh end)
+		end
+		keepToolEquipped(char())
+		ghostGunVisuals(char())
+		if hh and hh.Health < hh.MaxHealth then hh.Health = hh.MaxHealth end
 	end))
 end
 
@@ -1062,11 +1043,19 @@ local function doRealShot()
 	if not tool then return end
 	local origin = Camera.CFrame.Position
 	local hitPos = gunHit()
+	pcall(function()
+		tool:Activate()
+	end)
 	local signaled = fireMouseShootSignal()
 	fireGunRemotes(tool, hitPos, origin)
+	pcall(function()
+		if type(mouse1click) == "function" then mouse1click() end
+	end)
 	if not signaled then
 		pcall(function()
-			if type(mouse1click) == "function" then mouse1click() end
+			local pos = UserInputService:GetMouseLocation()
+			VIM:SendMouseButtonEvent(pos.X, pos.Y, 0, true, game, 1)
+			VIM:SendMouseButtonEvent(pos.X, pos.Y, 0, false, game, 1)
 		end)
 	end
 end
@@ -1623,6 +1612,20 @@ local function setSpeedLoop(on)
 		local h = hum()
 		if h then h.WalkSpeed = S.walkSpeed end
 	end))
+end
+
+local function setThirdPerson(on)
+	S.toggles.thirdPerson = on == true
+	pcall(function()
+		if on then
+			LP.CameraMaxZoomDistance = 64
+			LP.CameraMinZoomDistance = 0.5
+			LP.CameraMode = Enum.CameraMode.Classic
+			if hum() then hum().CameraOffset = Vector3.new(0, 1.5, 0) end
+		else
+			if hum() then hum().CameraOffset = Vector3.zero end
+		end
+	end)
 end
 
 -- ── Instant prompts + farms (Express Hub Job System paths) ─────
@@ -2506,7 +2509,7 @@ verL.Font = Enum.Font.GothamMedium
 verL.TextSize = 9
 verL.TextColor3 = C.accent2
 verL.TextXAlignment = Enum.TextXAlignment.Left
-verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.5.3" or "CALI  ·  HUB  ·  v1.5.3"
+verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.5.4" or "CALI  ·  HUB  ·  v1.5.4"
 verL.ZIndex = 7
 verL.Parent = header
 
@@ -2653,7 +2656,7 @@ footR.Parent = footer
 task.spawn(function()
 	while footer.Parent do
 		local tag = isVoiceServer() and "VC" or "main"
-		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.5.3"
+		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.5.4"
 		task.wait(2)
 	end
 end)
@@ -2831,6 +2834,9 @@ local function makeToggle(parent, opts)
 		end
 	end
 	render()
+	if id then
+		S.toggleUI[id] = { render = render, callback = opts.callback }
+	end
 	pill.MouseButton1Click:Connect(function()
 		local on = not (S.toggles[id] == true)
 		if opts.callback then
@@ -3175,8 +3181,8 @@ end
 section(home, "QUICK")
 makeToggle(home, {
 	id = "combatGod", title = "Combat God",
-	desc = "Server parked in a green zone",
-	tip = "Physics stay in a safe zone. You still walk on your screen. That's the spawn shield.",
+	desc = "Shield + snap-back  ·  G to toggle",
+	tip = "Does not park your body in a green zone (that froze the camera). G key toggles.",
 	callback = setCombatGod,
 })
 makeToggle(home, {
@@ -3199,7 +3205,7 @@ makeToggle(home, {
 section(combat, "SURVIVE")
 makeToggle(combat, {
 	id = "combatGod", title = "Combat God",
-	desc = "Server parked in a green zone",
+	desc = "Shield + snap-back  ·  G to toggle",
 	callback = setCombatGod,
 })
 makeToggle(combat, {
@@ -3349,6 +3355,11 @@ makeSlider(move, { title = "Fly Speed", min = 20, max = 250, get = function() re
 makeToggle(move, { id = "noclip", title = "Noclip", callback = setNoclip })
 makeToggle(move, { id = "infJump", title = "Infinite Jump", callback = setInfJump })
 makeToggle(move, { id = "ctrlTp", title = "Ctrl + Click TP", callback = function(on) S.toggles.ctrlTp = on end })
+makeToggle(move, {
+	id = "thirdPerson",
+	title = "Third Person (T)",
+	callback = setThirdPerson,
+})
 
 -- CARS (whole-chassis accel + CFrame fly, no seat-only jitter)
 section(cars, "SPEED")
@@ -3522,6 +3533,67 @@ makeButton(ply, { title = "Unspectate", callback = function()
 end })
 
 -- MISC
+section(misc, "KEYBINDS")
+do
+	local function flipToggle(id, setter)
+		local on = not (S.toggles[id] == true)
+		if setter then
+			setter(on)
+		else
+			S.toggles[id] = on
+		end
+		local rec = S.toggleUI[id]
+		if rec and rec.render then rec.render() end
+	end
+	local function bindRow(id, title)
+		local row = Instance.new("Frame")
+		row.LayoutOrder = n()
+		row.Size = UDim2.new(1, -6, 0, 36)
+		row.BackgroundColor3 = C.card
+		row.BorderSizePixel = 0
+		row.Parent = misc
+		corner(row, 10)
+		stroke(row, C.strokeSoft, 1, 0.58)
+		local lab = Instance.new("TextLabel")
+		lab.BackgroundTransparency = 1
+		lab.Size = UDim2.new(0.62, 0, 1, 0)
+		lab.Position = UDim2.fromOffset(12, 0)
+		lab.Font = Enum.Font.GothamMedium
+		lab.TextSize = 12
+		lab.TextColor3 = C.text
+		lab.TextXAlignment = Enum.TextXAlignment.Left
+		lab.Text = title
+		lab.Parent = row
+		local btn = Instance.new("TextButton")
+		btn.Size = UDim2.fromOffset(88, 24)
+		btn.Position = UDim2.new(1, -100, 0.5, -12)
+		btn.BackgroundColor3 = C.bg
+		btn.TextColor3 = C.accent2
+		btn.Font = Enum.Font.GothamBold
+		btn.TextSize = 11
+		btn.AutoButtonColor = false
+		btn.Parent = row
+		corner(btn, 6)
+		local function label()
+			local k = S.binds[id]
+			btn.Text = (S.bindListen == id) and "..." or (k and k.Name or "?")
+		end
+		label()
+		btn.MouseButton1Click:Connect(function()
+			S.bindListen = id
+			label()
+		end)
+		S.toggleUI["bind_" .. id] = { render = label }
+	end
+	bindRow("menu", "Hide UI")
+	bindRow("combatGod", "Combat God")
+	bindRow("fly", "Fly")
+	bindRow("noclip", "Noclip")
+	bindRow("esp", "All ESP")
+	bindRow("carFly", "Car Fly")
+	bindRow("thirdPerson", "Third Person")
+	S._flipToggle = flipToggle
+end
 section(misc, "TEAMS / CODES")
 makeButton(misc, { title = "Team: Civilian", callback = function()
 	pcall(function()
@@ -3605,9 +3677,30 @@ pcall(function()
 end)
 
 UserInputService.InputBegan:Connect(function(input, gp)
+	if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
+	if S.bindListen then
+		S.binds[S.bindListen] = input.KeyCode
+		local rec = S.toggleUI["bind_" .. S.bindListen]
+		S.bindListen = nil
+		if rec and rec.render then rec.render() end
+		return
+	end
 	if gp then return end
-	if input.KeyCode == Enum.KeyCode.RightShift then
+	local flip = S._flipToggle
+	if input.KeyCode == S.binds.menu then
 		sg.Enabled = not sg.Enabled
+	elseif input.KeyCode == S.binds.combatGod then
+		if flip then flip("combatGod", setCombatGod) else setCombatGod(not S.toggles.combatGod) end
+	elseif input.KeyCode == S.binds.fly then
+		if flip then flip("fly", setFly) else setFly(not S.toggles.fly) end
+	elseif input.KeyCode == S.binds.noclip then
+		if flip then flip("noclip", setNoclip) else setNoclip(not S.toggles.noclip) end
+	elseif input.KeyCode == S.binds.esp then
+		if flip then flip("esp", setESP) else setESP(not S.toggles.esp) end
+	elseif input.KeyCode == S.binds.carFly then
+		if flip then flip("carFly", setCarFly) else setCarFly(not S.toggles.carFly) end
+	elseif input.KeyCode == S.binds.thirdPerson then
+		if flip then flip("thirdPerson", setThirdPerson) else setThirdPerson(not S.toggles.thirdPerson) end
 	end
 end)
 
