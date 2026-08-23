@@ -1,6 +1,6 @@
 --[[
   VOIDZ HUB — Cali Shootout
-  Build 2026-08-23-1.3.0  |  Key: VOIDZHUB  |  RightShift toggle
+  Build 2026-08-23-1.3.1  |  Key: VOIDZHUB  |  RightShift toggle
   Places: 12077443856 (main) + 16940099758 (Voice Chat)
 ]]
 
@@ -22,7 +22,7 @@ local Mouse = LP:GetMouse()
 local Camera = Workspace.CurrentCamera
 
 local HUB_NAME = "VOIDZ"
-local BUILD = "2026-08-23-1.3.0"
+local BUILD = "2026-08-23-1.3.1"
 local ACCESS_KEY = "VOIDZHUB"
 local CALI_UNIVERSE = 4263576532
 local PLACE_MAIN = 12077443856
@@ -291,67 +291,127 @@ local function cashOf(p)
 	return n
 end
 
--- ── Combat God: stay alive AND keep guns ───────────────────────
--- No ForceField, no PlatformStand, no Sit — those stop shooting.
-local function applyCombatGod(h, c)
-	if not h then return end
-	pcall(function()
-		h.BreakJointsOnDeath = false
-		h:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
-		h:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-		h:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-		h:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
-		h.PlatformStand = false
-		h.Sit = false
-		if h.Health < h.MaxHealth then
+-- ── Combat God (FE humanoid clone + health/armor refill) ───────
+-- Cali damage is server-sided. Setting Humanoid.Health locally does nothing.
+-- Clone-god (Infinite Yield style): server kills the old Humanoid, you keep
+-- a new one named "Humanoid" so tools still shoot.
+local function refillVitals(c, h)
+	if h then
+		pcall(function()
+			h.BreakJointsOnDeath = false
+			h:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+			h:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+			h:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+			h:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+			h.MaxHealth = math.max(h.MaxHealth, 100)
 			h.Health = h.MaxHealth
-		end
-	end)
+			h.PlatformStand = false
+		end)
+	end
 	if not c then return end
 	pcall(function()
-		for _, name in ipairs({ "Downed", "Knocked", "Ragdolled", "Stunned", "Dead", "KO", "Incapacitated" }) do
-			local v = c:FindFirstChild(name, true) or h:FindFirstChild(name)
-			if v and (v:IsA("BoolValue") or v:IsA("IntValue")) then
-				v.Value = false
-			end
-			if c:GetAttribute(name) == true then
-				c:SetAttribute(name, false)
-			end
-			if LP:GetAttribute(name) == true then
-				LP:SetAttribute(name, false)
+		for _, d in ipairs(c:GetDescendants()) do
+			local n = d.Name:lower()
+			if d:IsA("NumberValue") or d:IsA("IntValue") then
+				if n == "health" or n == "hp" or n == "armor" or n == "shield" or n == "stam" or n == "stamina" then
+					local mx = d.Parent and (d.Parent:FindFirstChild("Max" .. d.Name) or d.Parent:FindFirstChild("max" .. d.Name))
+					d.Value = mx and mx.Value or math.max(tonumber(d.Value) or 0, 100)
+				end
+			elseif d:IsA("BoolValue") and (n == "downed" or n == "knocked" or n == "ragdolled" or n == "dead" or n == "ko" or n == "stunned") then
+				d.Value = false
 			end
 		end
-		local ff = c:FindFirstChildOfClass("ForceField")
-		if ff then ff:Destroy() end
+		for _, a in ipairs({ "Downed", "Knocked", "Ragdolled", "Stunned", "Dead", "KO", "Health", "Armor" }) do
+			local v = c:GetAttribute(a)
+			if v == true then c:SetAttribute(a, false) end
+			if type(v) == "number" and v < 100 then c:SetAttribute(a, 100) end
+			v = LP:GetAttribute(a)
+			if v == true then LP:SetAttribute(a, false) end
+		end
 	end)
+end
+
+local function feCloneGod(c)
+	if not c or not S.toggles.combatGod then return end
+	if c:GetAttribute("VOIDZ_GOD") then return end
+	local old = c:FindFirstChildOfClass("Humanoid")
+	if not old then return end
+	pcall(function()
+		old.Name = "VOIDZ_OldHum"
+		local nh = old:Clone()
+		nh.Name = "Humanoid"
+		nh.Parent = c
+		c:SetAttribute("VOIDZ_GOD", true)
+		task.defer(function()
+			pcall(function()
+				if old and old.Parent then old:Destroy() end
+			end)
+		end)
+		local cam = Workspace.CurrentCamera
+		if cam then cam.CameraSubject = nh end
+		local anim = c:FindFirstChild("Animate")
+		if anim then
+			anim.Disabled = true
+			task.defer(function()
+				if anim.Parent then anim.Disabled = false end
+			end)
+		end
+		pcall(function()
+			nh.TakeDamage = function() end
+		end)
+		nh.Died:Connect(function()
+			if not S.toggles.combatGod then return end
+			task.delay(0.15, function()
+				local cc = char()
+				if cc then
+					cc:SetAttribute("VOIDZ_GOD", nil)
+					feCloneGod(cc)
+				end
+			end)
+		end)
+	end)
+end
+
+local function applyCombatGod(h, c)
+	c = c or char()
+	h = h or (c and c:FindFirstChildOfClass("Humanoid"))
+	feCloneGod(c)
+	h = c and c:FindFirstChild("Humanoid") or h
+	refillVitals(c, h)
 end
 
 local function setCombatGod(on)
 	S.toggles.combatGod = on == true
 	dropConn("combatGodHB")
-	dropConn("combatGodHealth")
+	dropConn("combatGodStep")
 	if not on then
-		notify(HUB_NAME, "Combat God OFF", 1.2)
+		notify(HUB_NAME, "Combat God OFF — respawn to fully clear", 1.5)
 		return
 	end
-	notify(HUB_NAME, "Combat God ON — invincible, guns still work", 2)
-	local function bind(h)
-		if not h then return end
-		dropConn("combatGodHealth")
-		addConn("combatGodHealth", h.HealthChanged:Connect(function()
-			if S.toggles.combatGod then
-				applyCombatGod(h, char())
+	notify(HUB_NAME, "Combat God ON — FE clone, guns still work", 2)
+	applyCombatGod(hum(), char())
+	pcall(function()
+		local hf = hookfunction
+		if type(hf) == "function" then
+			local h = hum()
+			if h and h.TakeDamage then
+				hf(h.TakeDamage, function() end)
 			end
-		end))
-	end
-	bind(hum())
-	LP.CharacterAdded:Connect(function(c)
-		task.wait(0.2)
-		if S.toggles.combatGod then bind(c:FindFirstChildOfClass("Humanoid")) end
+		end
 	end)
 	addConn("combatGodHB", RunService.Heartbeat:Connect(function()
 		if not S.toggles.combatGod then return end
 		applyCombatGod(hum(), char())
+	end))
+	addConn("combatGodStep", RunService.Stepped:Connect(function()
+		if not S.toggles.combatGod then return end
+		local c = char()
+		if not c then return end
+		for _, p in ipairs(c:GetChildren()) do
+			if p:IsA("BasePart") and not p:FindFirstAncestorWhichIsA("Tool") then
+				pcall(function() p.CanTouch = false end)
+			end
+		end
 	end))
 end
 
@@ -1435,7 +1495,7 @@ verL.Font = Enum.Font.GothamMedium
 verL.TextSize = 9
 verL.TextColor3 = C.accent2
 verL.TextXAlignment = Enum.TextXAlignment.Left
-verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.3.0" or "CALI  ·  HUB  ·  v1.3.0"
+verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.3.1" or "CALI  ·  HUB  ·  v1.3.1"
 verL.ZIndex = 7
 verL.Parent = header
 
@@ -1582,7 +1642,7 @@ footR.Parent = footer
 task.spawn(function()
 	while footer.Parent do
 		local tag = isVoiceServer() and "VC" or "main"
-		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.3.0"
+		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.3.1"
 		task.wait(2)
 	end
 end)
@@ -2102,8 +2162,8 @@ end
 section(home, "QUICK")
 makeToggle(home, {
 	id = "combatGod", title = "Combat God",
-	desc = "Invincible — guns still fire",
-	tip = "No ForceField. Health lock + anti-KO so you can keep shooting.",
+	desc = "FE clone god — guns still fire",
+	tip = "Server-proof humanoid clone. Respawn after you turn it off.",
 	callback = setCombatGod,
 })
 makeToggle(home, {
