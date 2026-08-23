@@ -1,6 +1,6 @@
 --[[
   VOIDZ HUB — Cali Shootout
-  Build 2026-08-23-1.5.4  |  Key: VOIDZHUB  |  RightShift toggle
+  Build 2026-08-23-1.5.5  |  Key: VOIDZHUB  |  RightShift toggle
   Places: 12077443856 (main) + 16940099758 (Voice Chat)
 ]]
 
@@ -23,7 +23,7 @@ local Mouse = LP:GetMouse()
 local Camera = Workspace.CurrentCamera
 
 local HUB_NAME = "VOIDZ"
-local BUILD = "2026-08-23-1.5.4"
+local BUILD = "2026-08-23-1.5.5"
 print("[VOIDZ CALI] booting " .. BUILD)
 warn("[VOIDZ CALI] booting " .. BUILD)
 task.spawn(function()
@@ -106,7 +106,6 @@ local S = {
 	bindListen = nil,
 	binds = {
 		menu = Enum.KeyCode.RightShift,
-		combatGod = Enum.KeyCode.G,
 		fly = Enum.KeyCode.F,
 		noclip = Enum.KeyCode.N,
 		esp = Enum.KeyCode.K,
@@ -628,64 +627,8 @@ local function applyCombatGod(h, c)
 	markSafeFlags(c)
 end
 
-local function setCombatGod(on)
-	S.toggles.combatGod = on == true
-	dropConn("combatGodHB")
-	dropConn("combatGodStep")
-	dropConn("combatGodCam")
-	dropConn("combatGodZone")
-	dropConn("combatGodDied")
-	pcall(function() RunService:UnbindFromRenderStep("VOIDZGOD") end)
-	godVis = nil
-	if not on then
-		releaseSafeZones()
-		notify(HUB_NAME, "Combat God OFF", 1.2)
-		return
-	end
-	zoneCacheAt = 0
-	local r0 = hrp()
-	godVis = r0 and r0.CFrame
-	spoofSafeZones()
-	notify(HUB_NAME, "Combat God ON — shield + snap-back (camera stays on you)", 2.2)
-	applyCombatGod(hum(), char())
-	local h = hum()
-	if h then
-		addConn("combatGodDied", h.Died:Connect(function()
-			if not S.toggles.combatGod then return end
-			S.godCF = hrp() and hrp().CFrame
-		end))
-	end
-	if not S._godCharHook then
-		S._godCharHook = true
-		LP.CharacterAdded:Connect(function(c)
-			if not S.toggles.combatGod then return end
-			local cf = S.godCF
-			task.defer(function()
-				local r = c:WaitForChild("HumanoidRootPart", 4)
-				local nh = c:WaitForChild("Humanoid", 4)
-				if cf and r then pcall(function() r.CFrame = cf end) end
-				applyCombatGod(nh, c)
-				spoofSafeZones()
-			end)
-		end)
-	end
-	addConn("combatGodHB", RunService.Heartbeat:Connect(function()
-		if not S.toggles.combatGod then return end
-		if hrp() then S.godCF = hrp().CFrame end
-		applyCombatGod(hum(), char())
-		spoofSafeZones()
-	end))
-	addConn("combatGodCam", RunService.RenderStepped:Connect(function()
-		if not S.toggles.combatGod then return end
-		local cam = Workspace.CurrentCamera
-		local hh = hum()
-		if cam and hh and cam.CameraSubject ~= hh then
-			pcall(function() cam.CameraSubject = hh end)
-		end
-		keepToolEquipped(char())
-		ghostGunVisuals(char())
-		if hh and hh.Health < hh.MaxHealth then hh.Health = hh.MaxHealth end
-	end))
+local function setCombatGod()
+	S.toggles.combatGod = false
 end
 
 -- ── Gun mods ───────────────────────────────────────────────────
@@ -791,6 +734,19 @@ local function applyGunMods()
 		local h = hum()
 		if h then pcall(function() h.CameraOffset = Vector3.zero end) end
 	end
+	if S.toggles.infAmmo or S.toggles.noReload or S.toggles.rapidFire then
+		pcall(function()
+			local h = hum()
+			if h and h.GetPlayingAnimationTracks then
+				for _, tr in ipairs(h:GetPlayingAnimationTracks()) do
+					local tn = string.lower(tostring(tr.Name or ""))
+					if string.find(tn, "reload", 1, true) or string.find(tn, "rechamber", 1, true) then
+						tr:Stop(0)
+					end
+				end
+			end
+		end)
+	end
 	if S.toggles.infAmmo or S.toggles.noReload then
 		pcall(function()
 			local pg = LP:FindFirstChildOfClass("PlayerGui")
@@ -876,6 +832,13 @@ local function patchGunTables()
 						v.Reloading = false
 						v.reloading = false
 						v.NeedReload = false
+						v.IsReloading = false
+						if type(v.Reload) == "function" then
+							v.Reload = function() end
+						end
+						if type(v.reload) == "function" then
+							v.reload = function() end
+						end
 					end
 					if S.toggles.rapidFire then
 						patchDelayField(v, "FireRate")
@@ -889,6 +852,11 @@ local function patchGunTables()
 						if v.canShoot ~= nil then v.canShoot = true end
 						if v.Reloading ~= nil then v.Reloading = false end
 						if v.Shooting ~= nil then v.Shooting = false end
+						v.Auto = true
+						v.Automatic = true
+						if type(v.Mode) == "string" then v.Mode = "Auto" end
+						if type(v.Firemode) == "string" then v.Firemode = "Auto" end
+						if type(v.FireMode) == "string" then v.FireMode = "Auto" end
 					end
 					if S.toggles.oneShot then
 						if type(v.Damage) == "number" then v.Damage = math.max(v.Damage, 250) end
@@ -1037,7 +1005,7 @@ end
 local lastRealShot = 0
 local function doRealShot()
 	local now = tick()
-	if now - lastRealShot < 0.07 then return end
+	if now - lastRealShot < 0.03 then return end
 	lastRealShot = now
 	local tool = equippedGun()
 	if not tool then return end
@@ -1162,7 +1130,7 @@ local function fireGun()
 	doRealShot()
 end
 
-addConn("gunFire", RunService.Heartbeat:Connect(function()
+addConn("gunFire", RunService.RenderStepped:Connect(function()
 	if not S.toggles.rapidFire then return end
 	if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then return end
 	if not equippedGun() then return end
@@ -2267,7 +2235,7 @@ task.spawn(function()
 			or S.toggles.rapidFire or S.toggles.oneShot then
 			patchGunTables()
 		end
-		task.wait(1)
+		task.wait(0.25)
 	end
 end)
 
@@ -2509,7 +2477,7 @@ verL.Font = Enum.Font.GothamMedium
 verL.TextSize = 9
 verL.TextColor3 = C.accent2
 verL.TextXAlignment = Enum.TextXAlignment.Left
-verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.5.4" or "CALI  ·  HUB  ·  v1.5.4"
+verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.5.5" or "CALI  ·  HUB  ·  v1.5.5"
 verL.ZIndex = 7
 verL.Parent = header
 
@@ -2656,7 +2624,7 @@ footR.Parent = footer
 task.spawn(function()
 	while footer.Parent do
 		local tag = isVoiceServer() and "VC" or "main"
-		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.5.4"
+		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.5.5"
 		task.wait(2)
 	end
 end)
@@ -3174,16 +3142,22 @@ do
 	hs.TextXAlignment = Enum.TextXAlignment.Left
 	hs.TextWrapped = true
 	hs.Text = isVoiceServer()
-		and "Voice Chat server  ·  same tools as main  ·  Combat God still shoots"
-		or "Main map  ·  Combat God keeps you shooting  ·  RightShift hide"
+		and "Voice Chat server  ·  hold M1 full-auto  ·  RightShift hide"
+		or "Main map  ·  hold M1 full-auto  ·  RightShift hide"
 	hs.Parent = hero
 end
 section(home, "QUICK")
 makeToggle(home, {
-	id = "combatGod", title = "Combat God",
-	desc = "Shield + snap-back  ·  G to toggle",
-	tip = "Does not park your body in a green zone (that froze the camera). G key toggles.",
-	callback = setCombatGod,
+	id = "rapidFire",
+	title = "Hold M1 full auto",
+	callback = function(on)
+		S.toggles.rapidFire = on
+		if on then
+			S.toggles.infAmmo = true
+			S.toggles.noReload = true
+			syncNoReloadKey()
+		end
+	end,
 })
 makeToggle(home, {
 	id = "silentAim", title = "Silent Aim",
@@ -3203,11 +3177,6 @@ makeToggle(home, {
 
 -- COMBAT
 section(combat, "SURVIVE")
-makeToggle(combat, {
-	id = "combatGod", title = "Combat God",
-	desc = "Shield + snap-back  ·  G to toggle",
-	callback = setCombatGod,
-})
 makeToggle(combat, {
 	id = "antiRagdoll", title = "Anti Ragdoll / KO",
 	callback = function(on)
@@ -3265,21 +3234,32 @@ section(guns, "GUN MODS")
 makeToggle(guns, { id = "noRecoil", title = "No Recoil", callback = function(on) S.toggles.noRecoil = on end })
 makeToggle(guns, { id = "noSpread", title = "No Spread", callback = function(on) S.toggles.noSpread = on end })
 makeToggle(guns, {
-	id = "infAmmo", title = "Infinite Ammo",
-	tip = "Sets mag AND max to 999 like Express so the HUD actually changes.",
-	callback = function(on) S.toggles.infAmmo = on syncNoReloadKey() end,
+	id = "infAmmo", title = "Infinite Ammo + no reload",
+	tip = "999/999 and blocks reload anim / R. Turn this on with Rapid Fire.",
+	callback = function(on)
+		S.toggles.infAmmo = on
+		S.toggles.noReload = on
+		syncNoReloadKey()
+	end,
 })
 makeToggle(guns, {
 	id = "noReload", title = "No Reload",
-	tip = "Blocks R and stops the reload flag so the gun never enters reload.",
+	tip = "Stops reload even if ammo isn't on.",
 	callback = function(on) S.toggles.noReload = on syncNoReloadKey() end,
 })
 makeToggle(guns, { id = "noJam", title = "Never Jam", callback = function(on) S.toggles.noJam = on end })
 makeToggle(guns, {
 	id = "rapidFire",
-	title = "Rapid Fire / no cooldown",
-	tip = "Fires the real gun script (mouse + remotes). Activate-only was just shells.",
-	callback = function(on) S.toggles.rapidFire = on end,
+	title = "Hold M1 full auto",
+	tip = "Hold click — dumps shots. Turn on Inf Ammo too so it never reloads.",
+	callback = function(on)
+		S.toggles.rapidFire = on
+		if on then
+			S.toggles.infAmmo = true
+			S.toggles.noReload = true
+			syncNoReloadKey()
+		end
+	end,
 })
 makeToggle(guns, {
 	id = "oneShot",
@@ -3294,11 +3274,11 @@ makeToggle(guns, {
 		S.toggles.ghostGun = on
 		dropConn("ghostGun")
 		if not on then
-			if not S.toggles.combatGod then restoreGhostGuns() end
+			restoreGhostGuns()
 			return
 		end
 		addConn("ghostGun", RunService.RenderStepped:Connect(function()
-			if S.toggles.ghostGun or S.toggles.combatGod then
+			if S.toggles.ghostGun then
 				keepToolEquipped(char())
 				ghostGunVisuals(char())
 			end
@@ -3586,7 +3566,6 @@ do
 		S.toggleUI["bind_" .. id] = { render = label }
 	end
 	bindRow("menu", "Hide UI")
-	bindRow("combatGod", "Combat God")
 	bindRow("fly", "Fly")
 	bindRow("noclip", "Noclip")
 	bindRow("esp", "All ESP")
@@ -3689,8 +3668,6 @@ UserInputService.InputBegan:Connect(function(input, gp)
 	local flip = S._flipToggle
 	if input.KeyCode == S.binds.menu then
 		sg.Enabled = not sg.Enabled
-	elseif input.KeyCode == S.binds.combatGod then
-		if flip then flip("combatGod", setCombatGod) else setCombatGod(not S.toggles.combatGod) end
 	elseif input.KeyCode == S.binds.fly then
 		if flip then flip("fly", setFly) else setFly(not S.toggles.fly) end
 	elseif input.KeyCode == S.binds.noclip then

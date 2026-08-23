@@ -6,7 +6,7 @@
 loadstring(game:HttpGet("https://raw.githubusercontent.com/fungamer1234/voidz-cali-shootout/main/VOIDZ_LOAD.lua"))()
 ```
 
-Build: `2026-08-23-1.5.4` · Key: `VOIDZHUB` (unlocks everything)
+Build: `2026-08-23-1.5.5` · Key: `VOIDZHUB` (unlocks everything)
 
 MacSploit: UI parents to **PlayerGui**. Do **not** pass `true` as a second argument to `HttpGet`.
 
@@ -22,14 +22,14 @@ GitHub: https://github.com/fungamer1234/voidz-cali-shootout
 
 ## Combat God
 
-Combat God keeps your **server position** in a green safe zone (spawn shield) while you still walk around on your screen. It does **not** hook `__namecall`. TPs tab has **Nearest Safe Zone**.
+Removed. Cali damage is server-sided; every client god we tried either did nothing, froze the camera, or got you kicked (267). Use Anti Ragdoll and farms/TPs instead.
 
 ## Tabs
 
 | Tab | What’s in it |
 | --- | --- |
-| Home | Quick Combat God, silent aim, ESP |
-| Combat | Combat God, anti-KO, silent aim, aimbot, hitbox, kill aura, kill-all |
+| Home | Full auto, silent aim, ESP |
+| Combat | Anti-KO, silent aim, aimbot, hitbox, kill aura, kill-all |
 | Guns | No recoil / spread, inf ammo, never jam, rapid fire, one-shot |
 | Farm | Instant prompts, box/trash/mop/car/grass autofarm, check printer TPs |
 | Move | Speed, fly, noclip, inf jump, Ctrl+Click TP |
@@ -40,6 +40,10 @@ Combat God keeps your **server position** in a green safe zone (spawn shield) wh
 | Misc | Anti-AFK, rejoin, server hop, unload |
 
 Merged from public Cali hubs (Express/_scripts autofarm list, Teeksaw TPs, YNC locations, MikeyHub/Airflow combat). The Luarmor copy of Express Hub is locked; this is a VOIDZ rebuild of those options so they actually run keyless.
+
+## Recent (1.5.5) — full auto + no reload, god removed
+
+Hold M1 dumps shots; Inf Ammo also kills reload anims. Combat God is gone (it never beat Cali’s server).
 
 ## Recent (1.5.4) — camera, guns, keybinds
 
