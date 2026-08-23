@@ -1,6 +1,6 @@
 --[[
   VOIDZ HUB — Cali Shootout
-  Build 2026-08-23-1.3.2  |  Key: VOIDZHUB  |  RightShift toggle
+  Build 2026-08-23-1.4.0  |  Key: VOIDZHUB  |  RightShift toggle
   Places: 12077443856 (main) + 16940099758 (Voice Chat)
 ]]
 
@@ -22,7 +22,7 @@ local Mouse = LP:GetMouse()
 local Camera = Workspace.CurrentCamera
 
 local HUB_NAME = "VOIDZ"
-local BUILD = "2026-08-23-1.3.2"
+local BUILD = "2026-08-23-1.4.0"
 local ACCESS_KEY = "VOIDZHUB"
 local CALI_UNIVERSE = 4263576532
 local PLACE_MAIN = 12077443856
@@ -66,6 +66,10 @@ local S = {
 	espDistColor = Color3.new(1, 1, 1),
 	espChamsColor = Color3.new(1, 1, 1),
 	camFov = 90,
+	carAccel = 0.04,
+	carSpeed = 180,
+	carFlySpeed = 90,
+	godCF = nil,
 }
 
 local function tw(o, props, t)
@@ -331,45 +335,16 @@ local function refillVitals(c, h)
 	end)
 end
 
-local function feCloneGod(c)
-	if not c or not S.toggles.combatGod then return end
-	if c:GetAttribute("VOIDZ_GOD") then return end
-	local old = c:FindFirstChildOfClass("Humanoid")
-	if not old then return end
-	pcall(function()
-		old.Name = "VOIDZ_OldHum"
-		local nh = old:Clone()
-		nh.Name = "Humanoid"
-		nh.Parent = c
-		c:SetAttribute("VOIDZ_GOD", true)
-		task.defer(function()
-			pcall(function()
-				if old and old.Parent then old:Destroy() end
-			end)
-		end)
-		local cam = Workspace.CurrentCamera
-		if cam then cam.CameraSubject = nh end
-		local anim = c:FindFirstChild("Animate")
-		if anim then
-			anim.Disabled = true
-			task.defer(function()
-				if anim.Parent then anim.Disabled = false end
-			end)
-		end
-		pcall(function()
-			nh.TakeDamage = function() end
-		end)
-		nh.Died:Connect(function()
-			if not S.toggles.combatGod then return end
-			task.delay(0.15, function()
-				local cc = char()
-				if cc then
-					cc:SetAttribute("VOIDZ_GOD", nil)
-					feCloneGod(cc)
-				end
-			end)
-		end)
-	end)
+local function ensureForceField(c)
+	if not c then return end
+	local ff = c:FindFirstChildOfClass("ForceField")
+	if not ff then
+		ff = Instance.new("ForceField")
+		ff.Name = "VOIDZ_FF"
+		ff.Visible = false
+		ff.Parent = c
+	end
+	ff.Visible = false
 end
 
 -- Ghost gun: keep the Tool equipped (so Activate still fires) but the
@@ -438,48 +413,113 @@ end
 local function applyCombatGod(h, c)
 	c = c or char()
 	h = h or (c and c:FindFirstChildOfClass("Humanoid"))
-	feCloneGod(c)
-	h = c and c:FindFirstChild("Humanoid") or h
+	ensureForceField(c)
 	refillVitals(c, h)
 	keepToolEquipped(c)
 	ghostGunVisuals(c)
+	if h then
+		pcall(function()
+			h.TakeDamage = function() end
+		end)
+	end
+end
+
+local godHooksOn = false
+local function installGodHooks()
+	if godHooksOn then return end
+	godHooksOn = true
+	pcall(function()
+		local hmm = hookmetamethod or (syn and syn.hook_metamethod)
+		if type(hmm) ~= "function" then return end
+		local ncm = getnamecallmethod or (debug and debug.getinfo)
+		local old
+		old = hmm(game, "__namecall", function(self, ...)
+			local method = ""
+			pcall(function()
+				method = (getnamecallmethod and getnamecallmethod()) or ""
+			end)
+			if S.toggles.combatGod and (method == "TakeDamage" or method == "takeDamage") then
+				return
+			end
+			return old(self, ...)
+		end)
+	end)
+	pcall(function()
+		local hmm = hookmetamethod or (syn and syn.hook_metamethod)
+		if type(hmm) ~= "function" then return end
+		local old
+		old = hmm(game, "__newindex", function(self, k, v)
+			if S.toggles.combatGod and typeof(self) == "Instance" and self:IsA("Humanoid")
+				and self:IsDescendantOf(LP.Character or self) then
+				if k == "Health" and type(v) == "number" and v < (self.MaxHealth or 100) then
+					v = self.MaxHealth or 100
+				end
+			end
+			return old(self, k, v)
+		end)
+	end)
 end
 
 local function setCombatGod(on)
 	S.toggles.combatGod = on == true
 	dropConn("combatGodHB")
 	dropConn("combatGodStep")
+	dropConn("combatGodDied")
 	if not on then
 		restoreGhostGuns()
-		notify(HUB_NAME, "Combat God OFF — respawn to fully clear", 1.5)
+		local c = char()
+		if c then
+			local ff = c:FindFirstChild("VOIDZ_FF")
+			if ff then pcall(function() ff:Destroy() end) end
+		end
+		notify(HUB_NAME, "Combat God OFF", 1.2)
 		return
 	end
-	notify(HUB_NAME, "Combat God ON — ghost gun, still shoots", 2)
+	notify(HUB_NAME, "Combat God ON — ForceField + health lock + ghost gun", 2)
+	installGodHooks()
 	applyCombatGod(hum(), char())
 	pcall(function()
 		local hf = hookfunction
-		if type(hf) == "function" then
-			local h = hum()
-			if h and h.TakeDamage then
-				hf(h.TakeDamage, function() end)
-			end
+		local h = hum()
+		if type(hf) == "function" and h and h.TakeDamage then
+			hf(h.TakeDamage, function() end)
 		end
 	end)
+	local h = hum()
+	if h then
+		addConn("combatGodDied", h.Died:Connect(function()
+			if not S.toggles.combatGod then return end
+			S.godCF = hrp() and hrp().CFrame
+		end))
+	end
+	if not S._godCharHook then
+		S._godCharHook = true
+		LP.CharacterAdded:Connect(function(c)
+			if not S.toggles.combatGod then return end
+			local cf = S.godCF
+			task.defer(function()
+				local r = c:WaitForChild("HumanoidRootPart", 4)
+				local nh = c:WaitForChild("Humanoid", 4)
+				if cf and r then pcall(function() r.CFrame = cf end) end
+				applyCombatGod(nh, c)
+			end)
+		end)
+	end
 	addConn("combatGodHB", RunService.Heartbeat:Connect(function()
 		if not S.toggles.combatGod then return end
-		applyCombatGod(hum(), char())
+		local c, h = char(), hum()
+		if hrp() then S.godCF = hrp().CFrame end
+		applyCombatGod(h, c)
 	end))
 	addConn("combatGodStep", RunService.Stepped:Connect(function()
 		if not S.toggles.combatGod then return end
 		local c = char()
 		if not c then return end
+		ensureForceField(c)
 		keepToolEquipped(c)
 		ghostGunVisuals(c)
-		for _, p in ipairs(c:GetChildren()) do
-			if p:IsA("BasePart") then
-				pcall(function() p.CanTouch = false end)
-			end
-		end
+		local h = hum()
+		if h and h.Health < h.MaxHealth then h.Health = h.MaxHealth end
 	end))
 end
 
@@ -568,6 +608,45 @@ local function applyGunMods()
 		local h = hum()
 		if h then pcall(function() h.CameraOffset = Vector3.zero end) end
 	end
+end
+
+local function patchGunTables()
+	pcall(function()
+		local gc = getgc or debug and debug.getregistry
+		if type(getgc) ~= "function" then return end
+		for _, v in ipairs(getgc(true)) do
+			if type(v) == "table" then
+				pcall(function()
+					if S.toggles.noRecoil then
+						if v.Recoil ~= nil then v.Recoil = 0 end
+						if v.recoil ~= nil then v.recoil = 0 end
+						if v.CameraShake ~= nil then v.CameraShake = 0 end
+						if v.Kick ~= nil then v.Kick = 0 end
+					end
+					if S.toggles.noSpread then
+						if v.Spread ~= nil then v.Spread = 0 end
+						if v.spread ~= nil then v.spread = 0 end
+						if v.Bloom ~= nil then v.Bloom = 0 end
+					end
+					if S.toggles.infAmmo then
+						if type(v.Ammo) == "number" then v.Ammo = 999 end
+						if type(v.ammo) == "number" then v.ammo = 999 end
+						if type(v.Clip) == "number" then v.Clip = 999 end
+						if type(v.Mag) == "number" then v.Mag = 999 end
+					end
+					if S.toggles.rapidFire then
+						if v.FireRate ~= nil then v.FireRate = 0.02 end
+						if v.Cooldown ~= nil then v.Cooldown = 0 end
+						if v.Delay ~= nil then v.Delay = 0 end
+						if v.Debounce ~= nil then v.Debounce = 0 end
+					end
+					if S.toggles.oneShot then
+						if type(v.Damage) == "number" then v.Damage = 9e4 end
+					end
+				end)
+			end
+		end
+	end)
 end
 
 local lastCamLook
@@ -774,38 +853,12 @@ end
 local function setFly(on)
 	S.toggles.fly = on == true
 	dropConn("fly")
-	local function strip()
-		local c = char()
-		if not c then return end
-		for _, n in ipairs({ "VOIDZ_Fly", "VOIDZ_FlyG" }) do
-			for _, p in ipairs(c:GetDescendants()) do
-				if p.Name == n then pcall(function() p:Destroy() end) end
-			end
-		end
-	end
-	strip()
 	if not on then return end
-	addConn("fly", RunService.RenderStepped:Connect(function()
+	addConn("fly", RunService.RenderStepped:Connect(function(dt)
 		if not S.toggles.fly then return end
 		local r = hrp()
 		if not r then return end
-		local bv = r:FindFirstChild("VOIDZ_Fly")
-		if not bv then
-			bv = Instance.new("BodyVelocity")
-			bv.Name = "VOIDZ_Fly"
-			bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-			bv.Parent = r
-		end
-		local bg = r:FindFirstChild("VOIDZ_FlyG")
-		if not bg then
-			bg = Instance.new("BodyGyro")
-			bg.Name = "VOIDZ_FlyG"
-			bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-			bg.P = 9e4
-			bg.Parent = r
-		end
 		local cam = Workspace.CurrentCamera
-		bg.CFrame = cam.CFrame
 		local dir = Vector3.zero
 		if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir += cam.CFrame.LookVector end
 		if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir -= cam.CFrame.LookVector end
@@ -813,7 +866,72 @@ local function setFly(on)
 		if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir += cam.CFrame.RightVector end
 		if UserInputService:IsKeyDown(Enum.KeyCode.Space) then dir += Vector3.new(0, 1, 0) end
 		if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then dir -= Vector3.new(0, 1, 0) end
-		bv.Velocity = dir.Magnitude > 0.05 and dir.Unit * (S.flySpeed or 80) or Vector3.zero
+		pcall(function()
+			r.AssemblyLinearVelocity = Vector3.zero
+			if dir.Magnitude > 0.05 then
+				r.CFrame = CFrame.new(r.Position + dir.Unit * (S.flySpeed or 80) * math.max(dt, 1 / 60)) * (cam.CFrame - cam.CFrame.Position)
+			else
+				r.CFrame = CFrame.new(r.Position) * (cam.CFrame - cam.CFrame.Position)
+			end
+		end)
+	end))
+end
+
+local function getCarSeat()
+	local h = hum()
+	local seat = h and h.SeatPart
+	if seat and seat:IsA("VehicleSeat") then return seat end
+	return nil
+end
+
+local function getCarModel(seat)
+	seat = seat or getCarSeat()
+	if not seat then return nil end
+	return seat:FindFirstAncestor(LP.Name .. "'s Car")
+		or (seat:FindFirstAncestor("Body") and seat:FindFirstAncestor("Body").Parent)
+		or seat:FindFirstAncestorWhichIsA("Model")
+end
+
+local function setCarAccel(on)
+	S.toggles.carAccel = on == true
+	dropConn("carAccel")
+	if not on then return end
+	addConn("carAccel", RunService.Heartbeat:Connect(function()
+		if not S.toggles.carAccel then return end
+		local seat = getCarSeat()
+		if not seat then return end
+		pcall(function()
+			seat.MaxSpeed = S.carSpeed or 180
+			seat.Torque = 1e5
+			seat.TurnSpeed = math.max(seat.TurnSpeed, 2)
+		end)
+		if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+			local m = 1 + (S.carAccel or 0.04)
+			local vel = seat.AssemblyLinearVelocity
+			seat.AssemblyLinearVelocity = Vector3.new(vel.X * m, vel.Y, vel.Z * m)
+		end
+	end))
+end
+
+local function setCarFly(on)
+	S.toggles.carFly = on == true
+	dropConn("carFly")
+	if not on then return end
+	addConn("carFly", RunService.RenderStepped:Connect(function()
+		if not S.toggles.carFly then return end
+		local seat = getCarSeat()
+		if not seat then return end
+		local cam = Workspace.CurrentCamera
+		local dir = Vector3.zero
+		if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir += cam.CFrame.LookVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir -= cam.CFrame.LookVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir -= cam.CFrame.RightVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir += cam.CFrame.RightVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.Space) then dir += Vector3.new(0, 1, 0) end
+		if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then dir -= Vector3.new(0, 1, 0) end
+		if dir.Magnitude > 0.05 then
+			seat.AssemblyLinearVelocity = dir.Unit * (S.carFlySpeed or 90)
+		end
 	end))
 end
 
@@ -1346,6 +1464,15 @@ addConn("guns", RunService.Heartbeat:Connect(function()
 		applyGunMods()
 	end
 end))
+task.spawn(function()
+	while true do
+		if S.toggles.noRecoil or S.toggles.noSpread or S.toggles.infAmmo
+			or S.toggles.rapidFire or S.toggles.oneShot then
+			patchGunTables()
+		end
+		task.wait(1)
+	end
+end)
 
 
 -- ── KEY GATE (FTAP-style void panel) ───────────────────────────
@@ -1563,7 +1690,7 @@ verL.Font = Enum.Font.GothamMedium
 verL.TextSize = 9
 verL.TextColor3 = C.accent2
 verL.TextXAlignment = Enum.TextXAlignment.Left
-verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.3.2" or "CALI  ·  HUB  ·  v1.3.2"
+verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.4.0" or "CALI  ·  HUB  ·  v1.4.0"
 verL.ZIndex = 7
 verL.Parent = header
 
@@ -1710,7 +1837,7 @@ footR.Parent = footer
 task.spawn(function()
 	while footer.Parent do
 		local tag = isVoiceServer() and "VC" or "main"
-		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.3.2"
+		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.4.0"
 		task.wait(2)
 	end
 end)
@@ -2034,6 +2161,7 @@ local TAB_DEFS = {
 	{ id = "guns", icon = "GN", label = "Guns" },
 	{ id = "farm", icon = "FM", label = "Farm" },
 	{ id = "move", icon = "MV", label = "Move" },
+	{ id = "cars", icon = "CR", label = "Cars" },
 	{ id = "visuals", icon = "VI", label = "Visuals" },
 	{ id = "tps", icon = "TP", label = "TPs" },
 	{ id = "players", icon = "PL", label = "Players" },
@@ -2180,10 +2308,11 @@ local combat = TAB_DEFS[2]._sc
 local guns = TAB_DEFS[3]._sc
 local farm = TAB_DEFS[4]._sc
 local move = TAB_DEFS[5]._sc
-local vis = TAB_DEFS[6]._sc
-local tps = TAB_DEFS[7]._sc
-local ply = TAB_DEFS[8]._sc
-local misc = TAB_DEFS[9]._sc
+local cars = TAB_DEFS[6]._sc
+local vis = TAB_DEFS[7]._sc
+local tps = TAB_DEFS[8]._sc
+local ply = TAB_DEFS[9]._sc
+local misc = TAB_DEFS[10]._sc
 
 -- HOME
 section(home, "WELCOME")
@@ -2230,8 +2359,8 @@ end
 section(home, "QUICK")
 makeToggle(home, {
 	id = "combatGod", title = "Combat God",
-	desc = "Ghost gun + FE god — still shoots",
-	tip = "Gun stays equipped but the mesh is hidden. Clone humanoid so you don't die.",
+	desc = "ForceField + health lock + ghost gun",
+	tip = "Invisible ForceField blocks TakeDamage. If you still drop, you snap back on respawn.",
 	callback = setCombatGod,
 })
 makeToggle(home, {
@@ -2249,7 +2378,7 @@ makeToggle(home, {
 section(combat, "SURVIVE")
 makeToggle(combat, {
 	id = "combatGod", title = "Combat God",
-	desc = "Ghost gun + invincible, still shoots",
+	desc = "ForceField + health lock + ghost gun",
 	callback = setCombatGod,
 })
 makeToggle(combat, {
@@ -2380,6 +2509,56 @@ makeSlider(move, { title = "Fly Speed", min = 20, max = 250, get = function() re
 makeToggle(move, { id = "noclip", title = "Noclip", callback = setNoclip })
 makeToggle(move, { id = "infJump", title = "Infinite Jump", callback = setInfJump })
 makeToggle(move, { id = "ctrlTp", title = "Ctrl + Click TP", callback = function(on) S.toggles.ctrlTp = on end })
+
+-- CARS (Express Hub accel: multiply VehicleSeat velocity while W)
+section(cars, "SPEED")
+makeToggle(cars, {
+	id = "carAccel",
+	title = "Enable Acceleration (hold W)",
+	tip = "Express method: multiplies your car's velocity while W is down.",
+	callback = setCarAccel,
+})
+makeSlider(cars, {
+	title = "Acceleration", min = 1, max = 80,
+	get = function() return math.floor((S.carAccel or 0.04) * 1000) end,
+	set = function(v) S.carAccel = v / 1000 end,
+})
+makeSlider(cars, {
+	title = "Max Speed", min = 40, max = 400,
+	get = function() return S.carSpeed end,
+	set = function(v)
+		S.carSpeed = v
+		local s = getCarSeat()
+		if s then pcall(function() s.MaxSpeed = v end) end
+	end,
+})
+section(cars, "FLY")
+makeToggle(cars, {
+	id = "carFly",
+	title = "Car Fly (WASD Space/Shift)",
+	callback = setCarFly,
+})
+makeSlider(cars, {
+	title = "Car Fly Speed", min = 20, max = 250,
+	get = function() return S.carFlySpeed end,
+	set = function(v) S.carFlySpeed = v end,
+})
+section(cars, "SPRINGS")
+makeToggle(cars, {
+	id = "carSprings",
+	title = "Show Springs",
+	callback = function(on)
+		S.toggles.carSprings = on
+		local seat = getCarSeat()
+		local veh = getCarModel(seat)
+		if not veh then return end
+		for _, sc in ipairs(veh:GetDescendants()) do
+			if sc:IsA("SpringConstraint") then
+				pcall(function() sc.Visible = on end)
+			end
+		end
+	end,
+})
 
 -- VISUALS (Express Hub layout)
 section(vis, "NAME ESP")
@@ -2539,6 +2718,8 @@ makeButton(misc, {
 		setKillAura(false)
 		setNoclip(false)
 		setFly(false)
+		setCarAccel(false)
+		setCarFly(false)
 		setInfJump(false)
 		setSpeedLoop(false)
 		setESP(false)

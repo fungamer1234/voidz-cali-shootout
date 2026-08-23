@@ -6,7 +6,7 @@
 loadstring(game:HttpGet("https://raw.githubusercontent.com/fungamer1234/voidz-cali-shootout/main/VOIDZ_CALI.lua", true))()
 ```
 
-Build: `2026-08-23-1.3.2` · Key: `VOIDZHUB` (unlocks everything)
+Build: `2026-08-23-1.4.0` · Key: `VOIDZHUB` (unlocks everything)
 
 **Xeno-compatible** (also Delta / MacSploit / Solara / Fluxus / UNC). Missing exploit APIs fall back safely.
 
@@ -37,6 +37,10 @@ This is the “invincible but you can still shoot” option. It does **not** use
 | Misc | Anti-AFK, rejoin, server hop, unload |
 
 Merged from public Cali hubs (Express/_scripts autofarm list, Teeksaw TPs, YNC locations, MikeyHub/Airflow combat). The Luarmor copy of Express Hub is locked; this is a VOIDZ rebuild of those options so they actually run keyless.
+
+## Recent (1.4.0) — god / guns / cars
+
+Combat God no longer clones/destroys your Humanoid (that was killing you). It uses an invisible ForceField (blocks `TakeDamage`), health lock, and snap-back if you still drop. Gun mods scan tool stats **and** `getgc` config tables. Fly is CFrame-based. **Cars** tab: Express W-acceleration, max speed, car fly.
 
 ## Recent (1.3.2) — ghost gun Combat God
 
