@@ -6,7 +6,7 @@
 loadstring(game:HttpGet("https://raw.githubusercontent.com/fungamer1234/voidz-cali-shootout/main/VOIDZ_CALI.lua", true))()
 ```
 
-Build: `2026-08-23-1.4.3` · Key: `VOIDZHUB` (unlocks everything)
+Build: `2026-08-23-1.4.4` · Key: `VOIDZHUB` (unlocks everything)
 
 **Xeno-compatible** (also Delta / MacSploit / Solara / Fluxus / UNC). Missing exploit APIs fall back safely.
 
@@ -31,12 +31,17 @@ Cali’s real “god” is the green **safe zones** / spawn shield the server pu
 | Guns | No recoil / spread, inf ammo, never jam, rapid fire, one-shot |
 | Farm | Instant prompts, box/trash/mop/car/grass autofarm, check printer TPs |
 | Move | Speed, fly, noclip, inf jump, Ctrl+Click TP |
+| Cars | Whole-chassis accel, max speed, hover fly, springs |
 | Visuals | Name/HP/cash/distance ESP, fullbright |
 | TPs | Gun shop, jobs, banks, ATMs, turfs, diamond heist (YNC + Teeksaw coords) |
 | Players | Select, TP, spectate |
 | Misc | Anti-AFK, rejoin, server hop, unload |
 
 Merged from public Cali hubs (Express/_scripts autofarm list, Teeksaw TPs, YNC locations, MikeyHub/Airflow combat). The Luarmor copy of Express Hub is locked; this is a VOIDZ rebuild of those options so they actually run keyless.
+
+## Recent (1.4.4) — car mods rebuilt
+
+Acceleration pushes the **whole chassis** (wheels included), adds speed instead of multiplying it, and caps at Max Speed so it doesn’t explode. Car fly CFrame-locks the vehicle, hovers when you let go, and won’t yeet you out of the seat with Space.
 
 ## Recent (1.4.3) — safe-zone Combat God
 

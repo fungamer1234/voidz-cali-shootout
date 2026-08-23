@@ -1,6 +1,6 @@
 --[[
   VOIDZ HUB — Cali Shootout
-  Build 2026-08-23-1.4.3  |  Key: VOIDZHUB  |  RightShift toggle
+  Build 2026-08-23-1.4.4  |  Key: VOIDZHUB  |  RightShift toggle
   Places: 12077443856 (main) + 16940099758 (Voice Chat)
 ]]
 
@@ -23,7 +23,7 @@ local Mouse = LP:GetMouse()
 local Camera = Workspace.CurrentCamera
 
 local HUB_NAME = "VOIDZ"
-local BUILD = "2026-08-23-1.4.3"
+local BUILD = "2026-08-23-1.4.4"
 local ACCESS_KEY = "VOIDZHUB"
 local CALI_UNIVERSE = 4263576532
 local PLACE_MAIN = 12077443856
@@ -68,9 +68,9 @@ local S = {
 	espHpColor = Color3.fromRGB(80, 255, 130),
 	espChamsColor = Color3.new(1, 1, 1),
 	camFov = 90,
-	carAccel = 0.04,
-	carSpeed = 180,
-	carFlySpeed = 90,
+	carAccel = 90,
+	carSpeed = 220,
+	carFlySpeed = 110,
 	godCF = nil,
 }
 
@@ -996,62 +996,322 @@ local function setFly(on)
 	end))
 end
 
-local function getCarSeat()
-	local h = hum()
-	local seat = h and h.SeatPart
-	if seat and seat:IsA("VehicleSeat") then return seat end
-	return nil
+local car = {
+	seat = nil,
+	model = nil,
+	parts = {},
+	collide = {},
+	flyCF = nil,
+	lastScan = 0,
+	lastSpring = 0,
+	oldJP = nil,
+	oldJH = nil,
+}
+
+local function flattenXZ(v)
+	local f = Vector3.new(v.X, 0, v.Z)
+	if f.Magnitude < 0.08 then return nil end
+	return f.Unit
 end
 
 local function getCarModel(seat)
-	seat = seat or getCarSeat()
 	if not seat then return nil end
-	return seat:FindFirstAncestor(LP.Name .. "'s Car")
-		or (seat:FindFirstAncestor("Body") and seat:FindFirstAncestor("Body").Parent)
-		or seat:FindFirstAncestorWhichIsA("Model")
+	local me = char()
+	local function valid(m)
+		return m and m:IsA("Model") and m ~= me and (not me or not m:IsDescendantOf(me)) and m ~= Workspace
+	end
+	local named = seat:FindFirstAncestor(LP.Name .. "'s Car")
+		or seat:FindFirstAncestor(LP.Name .. "'s car")
+		or seat:FindFirstAncestor(LP.DisplayName .. "'s Car")
+	if valid(named) then return named end
+	for _, n in ipairs({ "Body", "Misc", "Chassis", "Car", "Vehicle" }) do
+		local a = seat:FindFirstAncestor(n)
+		if a and valid(a.Parent) then return a.Parent end
+		if valid(a) then return a end
+	end
+	local m = seat:FindFirstAncestorWhichIsA("Model")
+	if valid(m) then
+		local n = 0
+		for _, p in ipairs(m:GetDescendants()) do
+			if p:IsA("BasePart") then
+				n += 1
+				if n > 3 then return m end
+			end
+		end
+		if valid(m.Parent) then return m.Parent end
+		return m
+	end
+	return valid(seat.Parent) and seat.Parent or nil
+end
+
+local function getCarSeat()
+	local h = hum()
+	if h then
+		local sp = h.SeatPart
+		if typeof(sp) == "Instance" and (sp:IsA("VehicleSeat") or sp:IsA("Seat")) then
+			return sp
+		end
+	end
+	local r = hrp()
+	if r then
+		local weld = r:FindFirstChild("SeatWeld")
+		if weld then
+			if weld.Part0 and (weld.Part0:IsA("VehicleSeat") or weld.Part0:IsA("Seat")) then return weld.Part0 end
+			if weld.Part1 and (weld.Part1:IsA("VehicleSeat") or weld.Part1:IsA("Seat")) then return weld.Part1 end
+		end
+		local ok, parts = pcall(function()
+			return r:GetConnectedParts(true)
+		end)
+		if ok and parts then
+			for _, p in ipairs(parts) do
+				if p:IsA("VehicleSeat") or p:IsA("Seat") then return p end
+			end
+		end
+	end
+	if car.seat and car.seat.Parent and h and car.seat.Occupant == h then
+		return car.seat
+	end
+	return nil
+end
+
+local function restoreCarCollide()
+	for p, can in pairs(car.collide) do
+		pcall(function()
+			if p and p.Parent then p.CanCollide = can end
+		end)
+	end
+	car.collide = {}
+end
+
+local function restoreCarJump()
+	local h = hum()
+	if h and car.oldJP ~= nil then
+		pcall(function()
+			h.JumpPower = car.oldJP
+			h.JumpHeight = car.oldJH or 7.2
+		end)
+	end
+	car.oldJP, car.oldJH = nil, nil
+end
+
+local function bindVehicle(seat)
+	if not seat then
+		if car.model then restoreCarCollide() end
+		car.seat, car.model, car.parts = nil, nil, {}
+		car.flyCF = nil
+		return
+	end
+	if car.seat == seat and car.model and car.model.Parent and (tick() - car.lastScan) < 0.8 then
+		return
+	end
+	car.seat = seat
+	car.model = getCarModel(seat)
+	car.parts = {}
+	car.lastScan = tick()
+	local src = car.model or seat.Parent
+	if src then
+		for _, p in ipairs(src:GetDescendants()) do
+			if p:IsA("BasePart") then
+				car.parts[#car.parts + 1] = p
+			end
+		end
+	end
+	if #car.parts == 0 then car.parts = { seat } end
+end
+
+local function eachCarPart(fn)
+	local list = car.parts
+	if #list == 0 and car.seat then list = { car.seat } end
+	for _, p in ipairs(list) do
+		if p and p.Parent then pcall(fn, p) end
+	end
+end
+
+local function setCarVel(vel, ang)
+	eachCarPart(function(p)
+		p.AssemblyLinearVelocity = vel
+		if ang ~= nil then p.AssemblyAngularVelocity = ang end
+	end)
+end
+
+local function dampCarSpin()
+	eachCarPart(function(p)
+		local a = p.AssemblyAngularVelocity
+		p.AssemblyAngularVelocity = Vector3.new(a.X * 0.18, a.Y, a.Z * 0.18)
+	end)
+end
+
+local function carFlyNoclip()
+	eachCarPart(function(p)
+		if car.collide[p] == nil then car.collide[p] = p.CanCollide end
+		p.CanCollide = false
+	end)
+end
+
+local function carFlyFrame(dt, doMove)
+	local seat = car.seat
+	if not seat then return end
+	local veh = car.model
+	local root = (veh and (veh.PrimaryPart or veh:FindFirstChildWhichIsA("VehicleSeat"))) or seat
+	dt = math.clamp(dt or 1 / 60, 0, 0.05)
+	if not car.flyCF then car.flyCF = root.CFrame end
+	local cam = Workspace.CurrentCamera.CFrame
+	if doMove then
+		local dir = Vector3.zero
+		if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir += cam.LookVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir -= cam.LookVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir -= cam.RightVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir += cam.RightVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.Space) or UserInputService:IsKeyDown(Enum.KeyCode.E) then
+			dir += Vector3.new(0, 1, 0)
+		end
+		if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or UserInputService:IsKeyDown(Enum.KeyCode.Q) then
+			dir -= Vector3.new(0, 1, 0)
+		end
+		local spd = S.carFlySpeed or 110
+		if dir.Magnitude > 0.05 then
+			car.flyCF = CFrame.new(car.flyCF.Position + dir.Unit * spd * dt) * (cam - cam.Position)
+		else
+			car.flyCF = CFrame.new(car.flyCF.Position) * (cam - cam.Position)
+		end
+	else
+		car.flyCF = CFrame.new(car.flyCF.Position) * (cam - cam.Position)
+	end
+	carFlyNoclip()
+	pcall(function()
+		if veh and veh.PivotTo then
+			veh:PivotTo(car.flyCF)
+		else
+			root.CFrame = car.flyCF
+		end
+	end)
+	setCarVel(Vector3.zero, Vector3.zero)
+	local h = hum()
+	if h then
+		if car.oldJP == nil then
+			car.oldJP = h.JumpPower
+			car.oldJH = h.JumpHeight
+		end
+		pcall(function()
+			h.JumpPower = 0
+			h.JumpHeight = 0
+			h.Jump = false
+		end)
+	end
+end
+
+local function carAccelFrame(dt, seat)
+	local root = (car.model and (car.model.PrimaryPart or car.model:FindFirstChildWhichIsA("VehicleSeat"))) or seat
+	local maxSpd = math.max(S.carSpeed or 220, 20)
+	pcall(function()
+		seat.MaxSpeed = maxSpd
+		seat.Torque = 1e6
+		seat.TurnSpeed = math.max(seat.TurnSpeed, 3)
+	end)
+	local w = UserInputService:IsKeyDown(Enum.KeyCode.W)
+	local rev = UserInputService:IsKeyDown(Enum.KeyCode.S)
+	pcall(function()
+		if w then
+			seat.Throttle = 1
+			seat.ThrottleFloat = 1
+		elseif rev then
+			seat.Throttle = -1
+			seat.ThrottleFloat = -1
+		end
+	end)
+	local vel = root.AssemblyLinearVelocity
+	local look = flattenXZ(root.CFrame.LookVector)
+	if not look then
+		local cam = Workspace.CurrentCamera.CFrame.LookVector
+		look = flattenXZ(cam) or Vector3.new(0, 0, -1)
+	end
+	local horiz = Vector3.new(vel.X, 0, vel.Z)
+	if w or rev then
+		local sign = w and 1 or -1
+		horiz = horiz + look * ((S.carAccel or 90) * sign * dt)
+		local aligned = look * horiz.Magnitude
+		horiz = horiz:Lerp(aligned, 0.18)
+	end
+	if horiz.Magnitude > maxSpd then
+		horiz = horiz.Unit * maxSpd
+	end
+	setCarVel(Vector3.new(horiz.X, vel.Y, horiz.Z))
+	dampCarSpin()
+end
+
+local function carTick(dt, phase)
+	dt = math.clamp(dt or 1 / 60, 0, 0.05)
+	local seat = getCarSeat()
+	bindVehicle(seat)
+	if not seat then
+		car.flyCF = nil
+		restoreCarJump()
+		return
+	end
+	if S.toggles.carSprings and car.model and phase == "hb" and tick() - car.lastSpring > 0.4 then
+		car.lastSpring = tick()
+		pcall(function()
+			for _, sc in ipairs(car.model:GetDescendants()) do
+				if sc:IsA("SpringConstraint") then sc.Visible = true end
+			end
+		end)
+	end
+	if S.toggles.carFly then
+		carFlyFrame(dt, phase == "step")
+		return
+	end
+	if next(car.collide) then restoreCarCollide() end
+	restoreCarJump()
+	car.flyCF = nil
+	if S.toggles.carAccel and phase == "hb" then
+		carAccelFrame(dt, seat)
+	end
+end
+
+local function syncCarLoop()
+	local want = S.toggles.carAccel or S.toggles.carFly or S.toggles.carSprings
+	if not want then
+		dropConn("carStep")
+		dropConn("carHB")
+		dropConn("carRS")
+		dropConn("carJump")
+		restoreCarCollide()
+		restoreCarJump()
+		car.flyCF = nil
+		return
+	end
+	if not S.conns.carHB then
+		addConn("carStep", RunService.Stepped:Connect(function(_, dt)
+			if S.toggles.carFly then carTick(dt, "step") end
+		end))
+		addConn("carHB", RunService.Heartbeat:Connect(function(dt)
+			carTick(dt, "hb")
+		end))
+		addConn("carRS", RunService.RenderStepped:Connect(function()
+			if S.toggles.carFly then carFlyFrame(0, false) end
+		end))
+		addConn("carJump", UserInputService.JumpRequest:Connect(function()
+			if S.toggles.carFly and car.seat then
+				local h = hum()
+				if h then h.Jump = false end
+			end
+		end))
+	end
 end
 
 local function setCarAccel(on)
 	S.toggles.carAccel = on == true
-	dropConn("carAccel")
-	if not on then return end
-	addConn("carAccel", RunService.Heartbeat:Connect(function()
-		if not S.toggles.carAccel then return end
-		local seat = getCarSeat()
-		if not seat then return end
-		pcall(function()
-			seat.MaxSpeed = S.carSpeed or 180
-			seat.Torque = 1e5
-			seat.TurnSpeed = math.max(seat.TurnSpeed, 2)
-		end)
-		if UserInputService:IsKeyDown(Enum.KeyCode.W) then
-			local m = 1 + (S.carAccel or 0.04)
-			local vel = seat.AssemblyLinearVelocity
-			seat.AssemblyLinearVelocity = Vector3.new(vel.X * m, vel.Y, vel.Z * m)
-		end
-	end))
+	syncCarLoop()
 end
 
 local function setCarFly(on)
 	S.toggles.carFly = on == true
-	dropConn("carFly")
-	if not on then return end
-	addConn("carFly", RunService.RenderStepped:Connect(function()
-		if not S.toggles.carFly then return end
-		local seat = getCarSeat()
-		if not seat then return end
-		local cam = Workspace.CurrentCamera
-		local dir = Vector3.zero
-		if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir += cam.CFrame.LookVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir -= cam.CFrame.LookVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir -= cam.CFrame.RightVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir += cam.CFrame.RightVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.Space) then dir += Vector3.new(0, 1, 0) end
-		if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then dir -= Vector3.new(0, 1, 0) end
-		if dir.Magnitude > 0.05 then
-			seat.AssemblyLinearVelocity = dir.Unit * (S.carFlySpeed or 90)
-		end
-	end))
+	if not on then
+		restoreCarCollide()
+		restoreCarJump()
+		car.flyCF = nil
+	end
+	syncCarLoop()
 end
 
 local function setInfJump(on)
@@ -1923,7 +2183,7 @@ verL.Font = Enum.Font.GothamMedium
 verL.TextSize = 9
 verL.TextColor3 = C.accent2
 verL.TextXAlignment = Enum.TextXAlignment.Left
-verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.4.3" or "CALI  ·  HUB  ·  v1.4.3"
+verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.4.4" or "CALI  ·  HUB  ·  v1.4.4"
 verL.ZIndex = 7
 verL.Parent = header
 
@@ -2070,7 +2330,7 @@ footR.Parent = footer
 task.spawn(function()
 	while footer.Parent do
 		local tag = isVoiceServer() and "VC" or "main"
-		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.4.3"
+		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.4.4"
 		task.wait(2)
 	end
 end)
@@ -2743,21 +3003,21 @@ makeToggle(move, { id = "noclip", title = "Noclip", callback = setNoclip })
 makeToggle(move, { id = "infJump", title = "Infinite Jump", callback = setInfJump })
 makeToggle(move, { id = "ctrlTp", title = "Ctrl + Click TP", callback = function(on) S.toggles.ctrlTp = on end })
 
--- CARS (Express Hub accel: multiply VehicleSeat velocity while W)
+-- CARS (whole-chassis accel + CFrame fly, no seat-only jitter)
 section(cars, "SPEED")
 makeToggle(cars, {
 	id = "carAccel",
-	title = "Enable Acceleration (hold W)",
-	tip = "Express method: multiplies your car's velocity while W is down.",
+	title = "Enable Acceleration (W / S)",
+	tip = "Pushes the whole car, not just the seat. Caps at Max Speed. S reverses.",
 	callback = setCarAccel,
 })
 makeSlider(cars, {
-	title = "Acceleration", min = 1, max = 80,
-	get = function() return math.floor((S.carAccel or 0.04) * 1000) end,
-	set = function(v) S.carAccel = v / 1000 end,
+	title = "Acceleration", min = 20, max = 200,
+	get = function() return S.carAccel end,
+	set = function(v) S.carAccel = v end,
 })
 makeSlider(cars, {
-	title = "Max Speed", min = 40, max = 400,
+	title = "Max Speed", min = 60, max = 500,
 	get = function() return S.carSpeed end,
 	set = function(v)
 		S.carSpeed = v
@@ -2769,10 +3029,11 @@ section(cars, "FLY")
 makeToggle(cars, {
 	id = "carFly",
 	title = "Car Fly (WASD Space/Shift)",
+	tip = "Locks the whole chassis in the air. Hover when you let go. E up, Q down too.",
 	callback = setCarFly,
 })
 makeSlider(cars, {
-	title = "Car Fly Speed", min = 20, max = 250,
+	title = "Car Fly Speed", min = 30, max = 350,
 	get = function() return S.carFlySpeed end,
 	set = function(v) S.carFlySpeed = v end,
 })
@@ -2782,8 +3043,8 @@ makeToggle(cars, {
 	title = "Show Springs",
 	callback = function(on)
 		S.toggles.carSprings = on
-		local seat = getCarSeat()
-		local veh = getCarModel(seat)
+		syncCarLoop()
+		local veh = getCarModel(getCarSeat())
 		if not veh then return end
 		for _, sc in ipairs(veh:GetDescendants()) do
 			if sc:IsA("SpringConstraint") then
@@ -2966,6 +3227,8 @@ makeButton(misc, {
 		setFly(false)
 		setCarAccel(false)
 		setCarFly(false)
+		S.toggles.carSprings = false
+		syncCarLoop()
 		setInfJump(false)
 		setSpeedLoop(false)
 		setESP(false)
