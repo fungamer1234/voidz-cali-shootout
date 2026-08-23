@@ -1,6 +1,6 @@
 --[[
   VOIDZ HUB — Cali Shootout
-  Build 2026-08-23-1.3.1  |  Key: VOIDZHUB  |  RightShift toggle
+  Build 2026-08-23-1.3.2  |  Key: VOIDZHUB  |  RightShift toggle
   Places: 12077443856 (main) + 16940099758 (Voice Chat)
 ]]
 
@@ -22,7 +22,7 @@ local Mouse = LP:GetMouse()
 local Camera = Workspace.CurrentCamera
 
 local HUB_NAME = "VOIDZ"
-local BUILD = "2026-08-23-1.3.1"
+local BUILD = "2026-08-23-1.3.2"
 local ACCESS_KEY = "VOIDZHUB"
 local CALI_UNIVERSE = 4263576532
 local PLACE_MAIN = 12077443856
@@ -372,12 +372,77 @@ local function feCloneGod(c)
 	end)
 end
 
+-- Ghost gun: keep the Tool equipped (so Activate still fires) but the
+-- game never draws the mesh — same look as the Cali clip (gun in hands, invisible).
+local ghostOrig = {}
+local function ghostOne(d)
+	pcall(function()
+		if d:IsA("BasePart") then
+			if ghostOrig[d] == nil then
+				ghostOrig[d] = { t = d.Transparency, l = d.LocalTransparencyModifier }
+			end
+			d.Transparency = 1
+			d.LocalTransparencyModifier = 1
+		elseif d:IsA("Decal") or d:IsA("Texture") then
+			if ghostOrig[d] == nil then ghostOrig[d] = { t = d.Transparency } end
+			d.Transparency = 1
+		elseif d:IsA("ParticleEmitter") or d:IsA("Beam") or d:IsA("Trail")
+			or d:IsA("Fire") or d:IsA("Smoke") or d:IsA("Sparkles") then
+			d.Enabled = false
+		elseif d:IsA("BillboardGui") or d:IsA("SurfaceGui") then
+			d.Enabled = false
+		end
+	end)
+end
+
+local function ghostGunVisuals(c)
+	c = c or char()
+	if not c then return end
+	for _, tool in ipairs(c:GetChildren()) do
+		if tool:IsA("Tool") then
+			for _, d in ipairs(tool:GetDescendants()) do
+				ghostOne(d)
+			end
+		end
+	end
+end
+
+local function restoreGhostGuns()
+	for inst, o in pairs(ghostOrig) do
+		pcall(function()
+			if inst and inst.Parent then
+				if o.t ~= nil and inst.Transparency then inst.Transparency = o.t end
+				if o.l ~= nil and inst.LocalTransparencyModifier then
+					inst.LocalTransparencyModifier = o.l
+				end
+			end
+		end)
+	end
+	ghostOrig = {}
+end
+
+local function keepToolEquipped(c)
+	c = c or char()
+	if not c then return end
+	if c:FindFirstChildOfClass("Tool") then return end
+	local bp = LP:FindFirstChildOfClass("Backpack")
+	if not bp then return end
+	for _, t in ipairs(bp:GetChildren()) do
+		if t:IsA("Tool") then
+			pcall(function() t.Parent = c end)
+			break
+		end
+	end
+end
+
 local function applyCombatGod(h, c)
 	c = c or char()
 	h = h or (c and c:FindFirstChildOfClass("Humanoid"))
 	feCloneGod(c)
 	h = c and c:FindFirstChild("Humanoid") or h
 	refillVitals(c, h)
+	keepToolEquipped(c)
+	ghostGunVisuals(c)
 end
 
 local function setCombatGod(on)
@@ -385,10 +450,11 @@ local function setCombatGod(on)
 	dropConn("combatGodHB")
 	dropConn("combatGodStep")
 	if not on then
+		restoreGhostGuns()
 		notify(HUB_NAME, "Combat God OFF — respawn to fully clear", 1.5)
 		return
 	end
-	notify(HUB_NAME, "Combat God ON — FE clone, guns still work", 2)
+	notify(HUB_NAME, "Combat God ON — ghost gun, still shoots", 2)
 	applyCombatGod(hum(), char())
 	pcall(function()
 		local hf = hookfunction
@@ -407,8 +473,10 @@ local function setCombatGod(on)
 		if not S.toggles.combatGod then return end
 		local c = char()
 		if not c then return end
+		keepToolEquipped(c)
+		ghostGunVisuals(c)
 		for _, p in ipairs(c:GetChildren()) do
-			if p:IsA("BasePart") and not p:FindFirstAncestorWhichIsA("Tool") then
+			if p:IsA("BasePart") then
 				pcall(function() p.CanTouch = false end)
 			end
 		end
@@ -1495,7 +1563,7 @@ verL.Font = Enum.Font.GothamMedium
 verL.TextSize = 9
 verL.TextColor3 = C.accent2
 verL.TextXAlignment = Enum.TextXAlignment.Left
-verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.3.1" or "CALI  ·  HUB  ·  v1.3.1"
+verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.3.2" or "CALI  ·  HUB  ·  v1.3.2"
 verL.ZIndex = 7
 verL.Parent = header
 
@@ -1642,7 +1710,7 @@ footR.Parent = footer
 task.spawn(function()
 	while footer.Parent do
 		local tag = isVoiceServer() and "VC" or "main"
-		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.3.1"
+		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.3.2"
 		task.wait(2)
 	end
 end)
@@ -2162,8 +2230,8 @@ end
 section(home, "QUICK")
 makeToggle(home, {
 	id = "combatGod", title = "Combat God",
-	desc = "FE clone god — guns still fire",
-	tip = "Server-proof humanoid clone. Respawn after you turn it off.",
+	desc = "Ghost gun + FE god — still shoots",
+	tip = "Gun stays equipped but the mesh is hidden. Clone humanoid so you don't die.",
 	callback = setCombatGod,
 })
 makeToggle(home, {
@@ -2181,7 +2249,7 @@ makeToggle(home, {
 section(combat, "SURVIVE")
 makeToggle(combat, {
 	id = "combatGod", title = "Combat God",
-	desc = "Invincible + still shoot",
+	desc = "Ghost gun + invincible, still shoots",
 	callback = setCombatGod,
 })
 makeToggle(combat, {
@@ -2244,6 +2312,24 @@ makeToggle(guns, { id = "infAmmo", title = "Infinite Ammo", callback = function(
 makeToggle(guns, { id = "noJam", title = "Never Jam", callback = function(on) S.toggles.noJam = on end })
 makeToggle(guns, { id = "rapidFire", title = "Rapid Fire / no cooldown", callback = function(on) S.toggles.rapidFire = on end })
 makeToggle(guns, { id = "oneShot", title = "One Shot Damage", callback = function(on) S.toggles.oneShot = on end })
+makeToggle(guns, {
+	id = "ghostGun", title = "Ghost Gun (invisible, still shoots)",
+	tip = "Hides the gun mesh. Tool stays equipped so you can fire.",
+	callback = function(on)
+		S.toggles.ghostGun = on
+		dropConn("ghostGun")
+		if not on then
+			if not S.toggles.combatGod then restoreGhostGuns() end
+			return
+		end
+		addConn("ghostGun", RunService.RenderStepped:Connect(function()
+			if S.toggles.ghostGun or S.toggles.combatGod then
+				keepToolEquipped(char())
+				ghostGunVisuals(char())
+			end
+		end))
+	end,
+})
 
 -- FARM
 section(farm, "AUTOFARM")
