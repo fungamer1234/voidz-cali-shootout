@@ -1,6 +1,6 @@
 --[[
   VOIDZ HUB — Cali Shootout
-  Build 2026-08-23-1.4.0  |  Key: VOIDZHUB  |  RightShift toggle
+  Build 2026-08-23-1.4.1  |  Key: VOIDZHUB  |  RightShift toggle
   Places: 12077443856 (main) + 16940099758 (Voice Chat)
 ]]
 
@@ -22,7 +22,7 @@ local Mouse = LP:GetMouse()
 local Camera = Workspace.CurrentCamera
 
 local HUB_NAME = "VOIDZ"
-local BUILD = "2026-08-23-1.4.0"
+local BUILD = "2026-08-23-1.4.1"
 local ACCESS_KEY = "VOIDZHUB"
 local CALI_UNIVERSE = 4263576532
 local PLACE_MAIN = 12077443856
@@ -64,6 +64,7 @@ local S = {
 	espNameColor = Color3.new(1, 1, 1),
 	espBoxColor = Color3.new(1, 1, 1),
 	espDistColor = Color3.new(1, 1, 1),
+	espHpColor = Color3.fromRGB(80, 255, 130),
 	espChamsColor = Color3.new(1, 1, 1),
 	camFov = 90,
 	carAccel = 0.04,
@@ -1169,10 +1170,11 @@ local function farmCheckTick()
 	end
 end
 
--- ── ESP (Express Hub: name / box / distance / chams) ───────────
+-- ── ESP (Express Hub: name / box / distance / health / chams) ──
 local nameDrawings = {}
 local boxAdorns = {}
 local distGuis = {}
+local hpGuis = {}
 
 local hasDrawing = false
 pcall(function()
@@ -1340,6 +1342,88 @@ local function setDistanceESP(on)
 	end))
 end
 
+local function setHealthESP(on)
+	S.toggles.espHp = on == true
+	if not on then
+		for p, g in pairs(hpGuis) do
+			pcall(function() g:Destroy() end)
+			hpGuis[p] = nil
+		end
+		dropConn("espHp")
+		return
+	end
+	dropConn("espHp")
+	addConn("espHp", RunService.RenderStepped:Connect(function()
+		if not S.toggles.espHp then return end
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p ~= LP and p.Character then
+				local head = p.Character:FindFirstChild("Head")
+				local humP = p.Character:FindFirstChildOfClass("Humanoid")
+				if head and humP then
+					local g = hpGuis[p]
+					if not g or not g.Parent or not g:FindFirstChild("FillTrack") then
+						if g then pcall(function() g:Destroy() end) end
+						g = Instance.new("BillboardGui")
+						g.Name = "VOIDZ_HpESP"
+						g.Size = UDim2.fromOffset(78, 20)
+						g.AlwaysOnTop = true
+						g.StudsOffset = Vector3.new(0, 3.15, 0)
+						g.Adornee = head
+						g.Parent = head
+						local tl = Instance.new("TextLabel")
+						tl.Name = "Txt"
+						tl.BackgroundTransparency = 1
+						tl.Size = UDim2.new(1, 0, 0, 11)
+						tl.Font = Enum.Font.GothamBold
+						tl.TextScaled = true
+						tl.TextStrokeTransparency = 0.35
+						tl.Parent = g
+						local track = Instance.new("Frame")
+						track.Name = "FillTrack"
+						track.Size = UDim2.new(1, 0, 0, 6)
+						track.Position = UDim2.fromOffset(0, 12)
+						track.BackgroundColor3 = Color3.fromRGB(16, 10, 22)
+						track.BackgroundTransparency = 0.12
+						track.BorderSizePixel = 0
+						track.Parent = g
+						corner(track, 2)
+						local fill = Instance.new("Frame")
+						fill.Name = "Fill"
+						fill.Size = UDim2.fromScale(1, 1)
+						fill.BackgroundColor3 = S.espHpColor
+						fill.BorderSizePixel = 0
+						fill.Parent = track
+						corner(fill, 2)
+						hpGuis[p] = g
+					end
+					local tl = g:FindFirstChild("Txt")
+					local fill = g:FindFirstChild("FillTrack") and g.FillTrack:FindFirstChild("Fill")
+					local hp = math.max(0, math.floor(humP.Health))
+					local mx = math.max(1, math.floor(humP.MaxHealth))
+					local frac = math.clamp(hp / mx, 0, 1)
+					local healthy = S.espHpColor or Color3.fromRGB(80, 255, 130)
+					local col = healthy:Lerp(Color3.fromRGB(255, 70, 70), 1 - frac)
+					if tl then
+						tl.Text = string.format("HP %d/%d", hp, mx)
+						tl.TextColor3 = col
+					end
+					if fill then
+						fill.Size = UDim2.fromScale(frac, 1)
+						fill.BackgroundColor3 = col
+					end
+					if g.Parent ~= head then
+						g.Parent = head
+						g.Adornee = head
+					end
+				end
+			elseif hpGuis[p] then
+				pcall(function() hpGuis[p]:Destroy() end)
+				hpGuis[p] = nil
+			end
+		end
+	end))
+end
+
 local function destroyChams(c)
 	if not c then return end
 	for _, part in ipairs(c:GetChildren()) do
@@ -1407,6 +1491,7 @@ local function setESP(on)
 	setNameESP(on)
 	setBoxESP(on)
 	setDistanceESP(on)
+	setHealthESP(on)
 	setChamsESP(on)
 	S.toggles.esp = on == true
 end
@@ -1690,7 +1775,7 @@ verL.Font = Enum.Font.GothamMedium
 verL.TextSize = 9
 verL.TextColor3 = C.accent2
 verL.TextXAlignment = Enum.TextXAlignment.Left
-verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.4.0" or "CALI  ·  HUB  ·  v1.4.0"
+verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.4.1" or "CALI  ·  HUB  ·  v1.4.1"
 verL.ZIndex = 7
 verL.Parent = header
 
@@ -1837,7 +1922,7 @@ footR.Parent = footer
 task.spawn(function()
 	while footer.Parent do
 		local tag = isVoiceServer() and "VC" or "main"
-		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.4.0"
+		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.4.1"
 		task.wait(2)
 	end
 end)
@@ -2370,7 +2455,7 @@ makeToggle(home, {
 })
 makeToggle(home, {
 	id = "esp", title = "All Express ESP",
-	tip = "Name + box + distance + chams.",
+	tip = "Name + box + distance + health + chams.",
 	callback = setESP,
 })
 
@@ -2570,6 +2655,9 @@ makeColorRow(vis, "Box Color", function() return S.espBoxColor end, function(c) 
 section(vis, "DISTANCE ESP")
 makeToggle(vis, { id = "espDist", title = "Distance Esp", callback = setDistanceESP })
 makeColorRow(vis, "Distance Color", function() return S.espDistColor end, function(c) S.espDistColor = c end)
+section(vis, "HEALTH ESP")
+makeToggle(vis, { id = "espHp", title = "Health Esp", callback = setHealthESP })
+makeColorRow(vis, "Health Color", function() return S.espHpColor end, function(c) S.espHpColor = c end)
 section(vis, "CHAMS ESP")
 makeToggle(vis, { id = "espChams", title = "Chams Esp", callback = setChamsESP })
 makeColorRow(vis, "Chams Color", function() return S.espChamsColor end, function(c)
@@ -2726,6 +2814,7 @@ makeButton(misc, {
 		setNameESP(false)
 		setBoxESP(false)
 		setDistanceESP(false)
+		setHealthESP(false)
 		setChamsESP(false)
 		setFullbright(false)
 		setInstantPrompt(false)
