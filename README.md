@@ -6,7 +6,7 @@
 loadstring(game:HttpGet("https://raw.githubusercontent.com/fungamer1234/voidz-cali-shootout/main/VOIDZ_CALI.lua", true))()
 ```
 
-Build: `2026-08-23-1.4.6` · Key: `VOIDZHUB` (unlocks everything)
+Build: `2026-08-23-1.4.7` · Key: `VOIDZHUB` (unlocks everything)
 
 **Xeno-compatible** (also Delta / MacSploit / Solara / Fluxus / UNC). Missing exploit APIs fall back safely.
 
@@ -38,6 +38,10 @@ Combat God keeps your **server position** in a green safe zone (spawn shield) wh
 | Misc | Anti-AFK, rejoin, server hop, unload |
 
 Merged from public Cali hubs (Express/_scripts autofarm list, Teeksaw TPs, YNC locations, MikeyHub/Airflow combat). The Luarmor copy of Express Hub is locked; this is a VOIDZ rebuild of those options so they actually run keyless.
+
+## Recent (1.4.7) — TCS off, Express ammo, parked-zone god
+
+Car accel disables TCS (that dashboard light), uses Express velocity on W, and **A/D turns** (boost lets off while you steer). Infinite ammo sets **999/999** on mag + max + HUD like Express. Combat God parks your physics in a green zone every Stepped/Heartbeat so the server shield can actually apply.
 
 ## Recent (1.4.6) — cars, ammo, god, health ESP
 

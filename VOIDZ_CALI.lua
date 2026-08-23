@@ -1,6 +1,6 @@
 --[[
   VOIDZ HUB — Cali Shootout
-  Build 2026-08-23-1.4.6  |  Key: VOIDZHUB  |  RightShift toggle
+  Build 2026-08-23-1.4.7  |  Key: VOIDZHUB  |  RightShift toggle
   Places: 12077443856 (main) + 16940099758 (Voice Chat)
 ]]
 
@@ -23,7 +23,7 @@ local Mouse = LP:GetMouse()
 local Camera = Workspace.CurrentCamera
 
 local HUB_NAME = "VOIDZ"
-local BUILD = "2026-08-23-1.4.6"
+local BUILD = "2026-08-23-1.4.7"
 local ACCESS_KEY = "VOIDZHUB"
 local CALI_UNIVERSE = 4263576532
 local PLACE_MAIN = 12077443856
@@ -569,21 +569,29 @@ local function applyCombatGod(h, c)
 	h = h or (c and c:FindFirstChildOfClass("Humanoid"))
 	refillVitals(c, h)
 	keepToolEquipped(c)
-	ghostGunVisuals(c)
 	markSafeFlags(c)
+end
+
+local function parkInSafeZone(r)
+	if not r then return end
+	local zcf = nearestZoneCF()
+	pcall(function()
+		r.CFrame = zcf
+		r.AssemblyLinearVelocity = Vector3.zero
+		r.AssemblyAngularVelocity = Vector3.zero
+	end)
 end
 
 local function setCombatGod(on)
 	S.toggles.combatGod = on == true
 	dropConn("combatGodHB")
 	dropConn("combatGodStep")
-	dropConn("combatGodRS")
 	dropConn("combatGodZone")
 	dropConn("combatGodDied")
+	pcall(function() RunService:UnbindFromRenderStep("VOIDZGOD") end)
 	godVis = nil
 	if not on then
 		releaseSafeZones()
-		restoreGhostGuns()
 		notify(HUB_NAME, "Combat God OFF", 1.2)
 		return
 	end
@@ -591,7 +599,7 @@ local function setCombatGod(on)
 	local r0 = hrp()
 	godVis = r0 and r0.CFrame
 	spoofSafeZones()
-	notify(HUB_NAME, "Combat God ON — server stays in a safe zone, you keep walking", 2.6)
+	notify(HUB_NAME, "Combat God ON — parked in a green zone on the server", 2.4)
 	applyCombatGod(hum(), char())
 	local h = hum()
 	if h then
@@ -615,33 +623,40 @@ local function setCombatGod(on)
 	end
 	addConn("combatGodStep", RunService.Stepped:Connect(function()
 		if not S.toggles.combatGod then return end
-		local r = hrp()
-		if r and godVis then pcall(function() r.CFrame = godVis end) end
+		parkInSafeZone(hrp())
 		keepToolEquipped(char())
-		local hh = hum()
-		if hh and hh.Health < hh.MaxHealth then hh.Health = hh.MaxHealth end
+		applyCombatGod(hum(), char())
 	end))
 	addConn("combatGodHB", RunService.Heartbeat:Connect(function()
 		if not S.toggles.combatGod then return end
-		local r = hrp()
-		if r then
-			godVis = r.CFrame
+		parkInSafeZone(hrp())
+	end))
+	pcall(function()
+		RunService:BindToRenderStep("VOIDZGOD", Enum.RenderPriority.Last.Value, function(dt)
+			if not S.toggles.combatGod then return end
+			local r = hrp()
+			local hh = hum()
+			if not r then return end
+			if not godVis then godVis = r.CFrame end
+			dt = math.clamp(dt or 1 / 60, 0, 0.05)
+			local md = hh and hh.MoveDirection or Vector3.zero
+			local spd = hh and math.max(hh.WalkSpeed, 16) or 16
+			local pos = godVis.Position + md * spd * dt
+			local lv = Camera.CFrame.LookVector
+			local look = Vector3.new(lv.X, 0, lv.Z)
+			if look.Magnitude > 0.08 then
+				godVis = CFrame.new(pos, pos + look.Unit)
+			else
+				godVis = CFrame.new(pos) * (godVis - godVis.Position)
+			end
 			S.godCF = godVis
-			local zcf = nearestZoneCF()
-			pcall(function() r.CFrame = zcf end)
-		end
-		applyCombatGod(hum(), char())
-	end))
-	addConn("combatGodRS", RunService.RenderStepped:Connect(function()
-		if not S.toggles.combatGod then return end
-		local r = hrp()
-		if r and godVis then pcall(function() r.CFrame = godVis end) end
-		ghostGunVisuals(char())
-	end))
+			r.CFrame = godVis
+		end)
+	end)
 	local lastSpoof = 0
 	addConn("combatGodZone", RunService.Heartbeat:Connect(function()
 		if not S.toggles.combatGod then return end
-		if tick() - lastSpoof < 0.2 then return end
+		if tick() - lastSpoof < 0.15 then return end
 		lastSpoof = tick()
 		spoofSafeZones()
 	end))
@@ -690,10 +705,8 @@ local function applyGunMods()
 						elseif S.toggles.noSpread and k:lower():find("accuracy") then
 							obj:SetAttribute(k, 1)
 						elseif (S.toggles.infAmmo or S.toggles.noReload)
-							and (k:lower():find("ammo") or k:lower():find("clip") or k:lower():find("mag"))
-							and not k:lower():find("max") then
-							local mx = obj:GetAttribute("MaxAmmo") or obj:GetAttribute("MagSize") or obj:GetAttribute("ClipSize")
-							obj:SetAttribute(k, (type(mx) == "number" and mx > 0) and mx or v)
+							and (k:lower():find("ammo") or k:lower():find("clip") or k:lower():find("mag")) then
+							obj:SetAttribute(k, 999)
 						elseif S.toggles.rapidFire and (k:lower():find("cool") or k:lower():find("delay") or k:lower():find("debounce")) then
 							obj:SetAttribute(k, 0)
 						elseif S.toggles.oneShot and k:lower():find("damage") then
@@ -715,17 +728,9 @@ local function applyGunMods()
 		if (S.toggles.infAmmo or S.toggles.noReload) then
 			if typeof(obj.Value) == "boolean" and (n:find("reload") or n:find("empty") or n:find("needreload")) then
 				obj.Value = false
-			elseif typeof(obj.Value) == "number" and not n:find("max")
+			elseif typeof(obj.Value) == "number"
 				and (n:find("ammo") or n:find("clip") or n:find("mag") or n:find("bullet") or n:find("round")) then
-				local mx
-				local par = obj.Parent
-				if par then
-					for _, mn in ipairs({ "MaxAmmo", "MaxClip", "MagSize", "MagazineSize", "ClipSize", "MaxMag" }) do
-						local m = par:FindFirstChild(mn)
-						if m and typeof(m.Value) == "number" and m.Value > 0 then mx = m.Value break end
-					end
-				end
-				obj.Value = mx or math.max(obj.Value, 1)
+				obj.Value = 999
 			end
 		end
 		if S.toggles.noJam and n:find("jam") then
@@ -759,6 +764,25 @@ local function applyGunMods()
 	if S.toggles.noRecoil then
 		local h = hum()
 		if h then pcall(function() h.CameraOffset = Vector3.zero end) end
+	end
+	if S.toggles.infAmmo or S.toggles.noReload then
+		pcall(function()
+			local pg = LP:FindFirstChildOfClass("PlayerGui")
+			if not pg then return end
+			for _, g in ipairs(pg:GetDescendants()) do
+				if g:IsA("TextLabel") or g:IsA("TextBox") then
+					local gn = (g.Name .. " " .. (g.Parent and g.Parent.Name or "")):lower()
+					local t = tostring(g.Text or "")
+					if gn:find("ammo") or gn:find("mag") or gn:find("clip") or gn:find("bullet") then
+						g.Text = "999/999"
+					elseif t:match("^%d+%s*/%s*%d+$") then
+						local a, b = t:match("(%d+)%s*/%s*(%d+)")
+						a, b = tonumber(a), tonumber(b)
+						if a and b and b <= 80 and a <= b then g.Text = "999/999" end
+					end
+				end
+			end
+		end)
 	end
 end
 
@@ -813,13 +837,16 @@ local function patchGunTables()
 						if v.Bloom ~= nil then v.Bloom = 0 end
 					end
 					if S.toggles.infAmmo or S.toggles.noReload then
-						local mx = v.MaxAmmo or v.ClipSize or v.MagSize or v.MaxClip or v.Magazine
-						if type(mx) ~= "number" or mx < 1 then mx = nil end
-						if type(v.Ammo) == "number" then v.Ammo = mx or v.Ammo end
-						if type(v.ammo) == "number" then v.ammo = mx or v.ammo end
-						if type(v.Clip) == "number" then v.Clip = mx or v.Clip end
-						if type(v.Mag) == "number" then v.Mag = mx or v.Mag end
-						if type(v.CurrentAmmo) == "number" then v.CurrentAmmo = mx or v.CurrentAmmo end
+						if type(v.MaxAmmo) == "number" then v.MaxAmmo = 999 end
+						if type(v.ClipSize) == "number" then v.ClipSize = 999 end
+						if type(v.MagSize) == "number" then v.MagSize = 999 end
+						if type(v.MaxClip) == "number" then v.MaxClip = 999 end
+						if type(v.Magazine) == "number" then v.Magazine = 999 end
+						if type(v.Ammo) == "number" then v.Ammo = 999 end
+						if type(v.ammo) == "number" then v.ammo = 999 end
+						if type(v.Clip) == "number" then v.Clip = 999 end
+						if type(v.Mag) == "number" then v.Mag = 999 end
+						if type(v.CurrentAmmo) == "number" then v.CurrentAmmo = 999 end
 						v.Reloading = false
 						v.reloading = false
 						v.NeedReload = false
@@ -1295,6 +1322,28 @@ local function bindVehicle(seat)
 	if #car.parts == 0 then car.parts = { seat } end
 end
 
+local function killCarAids(veh)
+	if not veh then return end
+	pcall(function()
+		for _, d in ipairs(veh:GetDescendants()) do
+			local n = d.Name:lower()
+			local aid = n:find("tcs", 1, true) or n:find("traction", 1, true) or n:find("stability", 1, true)
+				or n:find("esc", 1, true) or n == "abs" or n:find("stc", 1, true)
+			if aid then
+				if d:IsA("BoolValue") then
+					d.Value = false
+				elseif d:IsA("NumberValue") or d:IsA("IntValue") then
+					d.Value = 0
+				elseif d:IsA("LocalScript") or d:IsA("Script") then
+					d.Disabled = true
+				end
+				pcall(function() d:SetAttribute("Enabled", false) end)
+				pcall(function() d:SetAttribute("TCS", false) end)
+			end
+		end
+	end)
+end
+
 local function eachCarPart(fn)
 	local list = car.parts
 	if #list == 0 and car.seat then list = { car.seat } end
@@ -1384,17 +1433,25 @@ local function carFlyFrame(dt, doMove)
 end
 
 local function carAccelFrame(dt, seat)
-	local root = seat
-	if car.model and car.model.PrimaryPart then root = car.model.PrimaryPart end
 	local maxSpd = math.max(S.carSpeed or 220, 20)
-	pcall(function()
-		seat.MaxSpeed = maxSpd
-		seat.Torque = 1e6
-		seat.TurnSpeed = math.max(seat.TurnSpeed, 8)
-	end)
+	local a = UserInputService:IsKeyDown(Enum.KeyCode.A)
+	local d = UserInputService:IsKeyDown(Enum.KeyCode.D)
 	local w = UserInputService:IsKeyDown(Enum.KeyCode.W)
 	local rev = UserInputService:IsKeyDown(Enum.KeyCode.S)
 	pcall(function()
+		seat.MaxSpeed = maxSpd
+		seat.Torque = 1e6
+		seat.TurnSpeed = 12
+		if a and not d then
+			seat.Steer = -1
+			seat.SteerFloat = -1
+		elseif d and not a then
+			seat.Steer = 1
+			seat.SteerFloat = 1
+		else
+			seat.Steer = 0
+			seat.SteerFloat = 0
+		end
 		if w then
 			seat.Throttle = 1
 			seat.ThrottleFloat = 1
@@ -1404,21 +1461,19 @@ local function carAccelFrame(dt, seat)
 		end
 	end)
 	if not w and not rev then return end
-	local look = flattenXZ(root.CFrame.LookVector)
-		or flattenXZ(Workspace.CurrentCamera.CFrame.LookVector)
-		or Vector3.new(0, 0, -1)
-	local vel = root.AssemblyLinearVelocity
-	local sign = w and 1 or -1
-	local add = look * ((S.carAccel or 90) * sign * dt)
-	local nv = vel + add
-	local horiz = Vector3.new(nv.X, 0, nv.Z)
-	if horiz.Magnitude > maxSpd then
-		horiz = horiz.Unit * maxSpd
-		nv = Vector3.new(horiz.X, nv.Y, horiz.Z)
-	end
+	-- Express Hub: multiply seat XZ velocity. Skip the multiply while A/D
+	-- so TCS does not lock the steer.
+	if a or d then return end
+	local m = math.clamp((S.carAccel or 90) / 3000, 0.01, 0.08)
 	pcall(function()
-		root.AssemblyLinearVelocity = nv
-		if seat ~= root then seat.AssemblyLinearVelocity = nv end
+		local vel = seat.AssemblyLinearVelocity
+		local nv = Vector3.new(vel.X * (1 + m), vel.Y, vel.Z * (1 + m))
+		local horiz = Vector3.new(nv.X, 0, nv.Z)
+		if horiz.Magnitude > maxSpd then
+			horiz = horiz.Unit * maxSpd
+			nv = Vector3.new(horiz.X, nv.Y, horiz.Z)
+		end
+		seat.AssemblyLinearVelocity = nv
 	end)
 end
 
@@ -1447,6 +1502,10 @@ local function carTick(dt, phase)
 	restoreCarJump()
 	car.flyCF = nil
 	if S.toggles.carAccel and phase == "hb" then
+		if tick() - (car.lastTcs or 0) > 1 then
+			car.lastTcs = tick()
+			killCarAids(car.model or seat)
+		end
 		carAccelFrame(dt, seat)
 	end
 end
@@ -2380,7 +2439,7 @@ verL.Font = Enum.Font.GothamMedium
 verL.TextSize = 9
 verL.TextColor3 = C.accent2
 verL.TextXAlignment = Enum.TextXAlignment.Left
-verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.4.6" or "CALI  ·  HUB  ·  v1.4.6"
+verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.4.7" or "CALI  ·  HUB  ·  v1.4.7"
 verL.ZIndex = 7
 verL.Parent = header
 
@@ -2527,7 +2586,7 @@ footR.Parent = footer
 task.spawn(function()
 	while footer.Parent do
 		local tag = isVoiceServer() and "VC" or "main"
-		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.4.6"
+		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.4.7"
 		task.wait(2)
 	end
 end)
@@ -3049,8 +3108,8 @@ end
 section(home, "QUICK")
 makeToggle(home, {
 	id = "combatGod", title = "Combat God",
-	desc = "Server in a safe zone  ·  you keep walking",
-	tip = "Server thinks you are in a green zone (spawn shield). You still walk around locally.",
+	desc = "Server parked in a green zone",
+	tip = "Physics stay in a safe zone. You still walk on your screen. That's the spawn shield.",
 	callback = setCombatGod,
 })
 makeToggle(home, {
@@ -3073,7 +3132,7 @@ makeToggle(home, {
 section(combat, "SURVIVE")
 makeToggle(combat, {
 	id = "combatGod", title = "Combat God",
-	desc = "Server in a safe zone  ·  you keep walking",
+	desc = "Server parked in a green zone",
 	callback = setCombatGod,
 })
 makeToggle(combat, {
@@ -3134,7 +3193,7 @@ makeToggle(guns, { id = "noRecoil", title = "No Recoil", callback = function(on)
 makeToggle(guns, { id = "noSpread", title = "No Spread", callback = function(on) S.toggles.noSpread = on end })
 makeToggle(guns, {
 	id = "infAmmo", title = "Infinite Ammo",
-	tip = "Keeps the mag full at its real max (not 999 — that forced reload).",
+	tip = "Sets mag AND max to 999 like Express so the HUD actually changes.",
 	callback = function(on) S.toggles.infAmmo = on syncNoReloadKey() end,
 })
 makeToggle(guns, {
@@ -3229,7 +3288,7 @@ section(cars, "SPEED")
 makeToggle(cars, {
 	id = "carAccel",
 	title = "Enable Acceleration (W / S)",
-	tip = "Boosts forward only so A/D can still steer. S reverses.",
+	tip = "Kills TCS, Express-style boost on W, A/D steer. Hold A/D to turn (boost pauses while turning).",
 	callback = setCarAccel,
 })
 makeSlider(cars, {
