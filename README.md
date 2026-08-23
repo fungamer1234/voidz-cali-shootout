@@ -6,7 +6,7 @@
 loadstring(game:HttpGet("https://raw.githubusercontent.com/fungamer1234/voidz-cali-shootout/main/VOIDZ_CALI.lua", true))()
 ```
 
-Build: `2026-08-23-1.4.4` · Key: `VOIDZHUB` (unlocks everything)
+Build: `2026-08-23-1.4.5` · Key: `VOIDZHUB` (unlocks everything)
 
 **Xeno-compatible** (also Delta / MacSploit / Solara / Fluxus / UNC). Missing exploit APIs fall back safely.
 
@@ -38,6 +38,10 @@ Cali’s real “god” is the green **safe zones** / spawn shield the server pu
 | Misc | Anti-AFK, rejoin, server hop, unload |
 
 Merged from public Cali hubs (Express/_scripts autofarm list, Teeksaw TPs, YNC locations, MikeyHub/Airflow combat). The Luarmor copy of Express Hub is locked; this is a VOIDZ rebuild of those options so they actually run keyless.
+
+## Recent (1.4.5) — gun mods actually shoot
+
+Rapid fire no longer spams `Tool:Activate()` (that only ejected shells). It retriggers the real mouse-down gun script and the tool’s shoot remotes so bullets can damage.
 
 ## Recent (1.4.4) — car mods rebuilt
 

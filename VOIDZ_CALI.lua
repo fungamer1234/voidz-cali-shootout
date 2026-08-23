@@ -1,6 +1,6 @@
 --[[
   VOIDZ HUB — Cali Shootout
-  Build 2026-08-23-1.4.4  |  Key: VOIDZHUB  |  RightShift toggle
+  Build 2026-08-23-1.4.5  |  Key: VOIDZHUB  |  RightShift toggle
   Places: 12077443856 (main) + 16940099758 (Voice Chat)
 ]]
 
@@ -23,7 +23,7 @@ local Mouse = LP:GetMouse()
 local Camera = Workspace.CurrentCamera
 
 local HUB_NAME = "VOIDZ"
-local BUILD = "2026-08-23-1.4.4"
+local BUILD = "2026-08-23-1.4.5"
 local ACCESS_KEY = "VOIDZHUB"
 local CALI_UNIVERSE = 4263576532
 local PLACE_MAIN = 12077443856
@@ -709,11 +709,23 @@ local function applyGunMods()
 			obj.Value = typeof(obj.Value) == "boolean" and false or 0
 		end
 		if S.toggles.rapidFire then
-			if n:find("cooldown") or n:find("debounce") or n:find("delay") or n:find("firerate") or n:find("rpm") then
-				if n:find("rate") or n:find("rpm") then
-					if typeof(obj.Value) == "number" then obj.Value = math.max(obj.Value, 30) end
-				else
+			if typeof(obj.Value) == "boolean" then
+				if n:find("reload") or n:find("debounce") or n:find("jam") or n:find("wait") then
+					obj.Value = false
+				elseif n:find("canshoot") or n:find("canfire") or n:find("ready") then
+					obj.Value = true
+				end
+			elseif typeof(obj.Value) == "number" then
+				if n:find("lastshot") or n:find("nextshot") or n:find("shoottick") then
 					obj.Value = 0
+				elseif n:find("cooldown") or n:find("debounce") or n:find("delay") then
+					obj.Value = math.min(obj.Value, 0.045)
+				elseif n:find("firerate") or n:find("rpm") or n:find("rate") then
+					if obj.Value <= 2.5 then
+						obj.Value = math.min(obj.Value, 0.045)
+					else
+						obj.Value = math.max(obj.Value, 800)
+					end
 				end
 			end
 		end
@@ -727,13 +739,32 @@ local function applyGunMods()
 	end
 end
 
+local function isGunConfig(t)
+	local n = 0
+	if t.Ammo ~= nil or t.ammo ~= nil or t.Clip ~= nil or t.Mag ~= nil or t.MaxAmmo ~= nil then n += 1 end
+	if t.Damage ~= nil or t.damage ~= nil then n += 1 end
+	if t.Recoil ~= nil or t.recoil ~= nil or t.Spread ~= nil or t.spread ~= nil then n += 1 end
+	if t.FireRate ~= nil or t.Cooldown ~= nil or t.Delay ~= nil then n += 1 end
+	return n >= 2
+end
+
+local function patchDelayField(t, key)
+	local v = t[key]
+	if type(v) ~= "number" then return end
+	if v <= 2.5 then
+		t[key] = math.min(v, 0.045)
+	else
+		t[key] = math.max(v, 800)
+	end
+end
+
 local function patchGunTables()
 	pcall(function()
-		local gc = getgc or debug and debug.getregistry
 		if type(getgc) ~= "function" then return end
 		for _, v in ipairs(getgc(true)) do
 			if type(v) == "table" then
 				pcall(function()
+					if not isGunConfig(v) then return end
 					if S.toggles.noRecoil then
 						if v.Recoil ~= nil then v.Recoil = 0 end
 						if v.recoil ~= nil then v.recoil = 0 end
@@ -752,13 +783,20 @@ local function patchGunTables()
 						if type(v.Mag) == "number" then v.Mag = 999 end
 					end
 					if S.toggles.rapidFire then
-						if v.FireRate ~= nil then v.FireRate = 0.02 end
-						if v.Cooldown ~= nil then v.Cooldown = 0 end
-						if v.Delay ~= nil then v.Delay = 0 end
-						if v.Debounce ~= nil then v.Debounce = 0 end
+						patchDelayField(v, "FireRate")
+						patchDelayField(v, "Cooldown")
+						patchDelayField(v, "Delay")
+						if type(v.Debounce) == "boolean" then v.Debounce = false
+						elseif type(v.Debounce) == "number" then v.Debounce = 0 end
+						if v.LastShot ~= nil then v.LastShot = 0 end
+						if v.lastShot ~= nil then v.lastShot = 0 end
+						if v.CanShoot ~= nil then v.CanShoot = true end
+						if v.canShoot ~= nil then v.canShoot = true end
+						if v.Reloading ~= nil then v.Reloading = false end
+						if v.Shooting ~= nil then v.Shooting = false end
 					end
 					if S.toggles.oneShot then
-						if type(v.Damage) == "number" then v.Damage = 9e4 end
+						if type(v.Damage) == "number" then v.Damage = math.max(v.Damage, 250) end
 					end
 				end)
 			end
@@ -784,11 +822,6 @@ addConn("gunCam", RunService.RenderStepped:Connect(function()
 		end
 	end
 	lastCamLook = cam.CFrame.LookVector
-	if S.toggles.rapidFire and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
-		local c = char()
-		local tool = c and c:FindFirstChildOfClass("Tool")
-		if tool then pcall(function() tool:Activate() end) end
-	end
 end))
 
 -- ── Silent aim / aimbot ────────────────────────────────────────
@@ -816,6 +849,112 @@ local function closestInFov()
 		end
 	end
 	return best
+end
+
+local function equippedGun()
+	local c = char()
+	return c and c:FindFirstChildOfClass("Tool")
+end
+
+local function gunHit()
+	if S.toggles.silentAim then
+		local t = closestInFov()
+		local part = t and t.Character and (t.Character:FindFirstChild("Head") or t.Character:FindFirstChild("HumanoidRootPart"))
+		if part then
+			return part.Position, part
+		end
+	end
+	local pos = Mouse.Hit and Mouse.Hit.Position
+	return pos or (Camera.CFrame.Position + Camera.CFrame.LookVector * 400), Mouse.Target
+end
+
+local function skipRemoteName(n)
+	n = tostring(n or ""):lower()
+	return n:find("reload", 1, true)
+		or n:find("equip", 1, true)
+		or n:find("team", 1, true)
+		or n:find("buy", 1, true)
+		or n:find("code", 1, true)
+		or n:find("kick", 1, true)
+		or n:find("ban", 1, true)
+		or n:find("detect", 1, true)
+end
+
+local function fireGunRemotes(tool, hitPos, origin)
+	local fired = 0
+	local function try(r)
+		if fired >= 4 then return end
+		if skipRemoteName(r.Name) then return end
+		fired += 1
+		pcall(function() r:FireServer(hitPos) end)
+		pcall(function() r:FireServer(origin, hitPos) end)
+	end
+	if tool then
+		for _, r in ipairs(tool:GetDescendants()) do
+			if r:IsA("RemoteEvent") or r:IsA("UnreliableRemoteEvent") then
+				try(r)
+			elseif r:IsA("BindableEvent") and not skipRemoteName(r.Name) then
+				pcall(function() r:Fire(hitPos) end)
+			end
+		end
+	end
+	local rs = game:GetService("ReplicatedStorage")
+	for _, folder in ipairs({ rs:FindFirstChild("Events"), rs:FindFirstChild("Remotes"), rs:FindFirstChild("GunEvents"), rs }) do
+		if folder then
+			for _, r in ipairs(folder:GetChildren()) do
+				if (r:IsA("RemoteEvent") or r:IsA("UnreliableRemoteEvent")) and not skipRemoteName(r.Name) then
+					local n = r.Name:lower():gsub("[^%w]", "")
+					if n:find("shoot") or n:find("gunfire") or n == "fire" or n == "hit" or n:find("bullet") or n:find("weapon") or n:find("castray") then
+						try(r)
+					end
+				end
+			end
+		end
+	end
+end
+
+local function fireMouseShootSignal()
+	local fs = firesignal or fire_signal
+	if type(fs) == "function" then
+		pcall(function() fs(Mouse.Button1Down) end)
+		return true
+	end
+	local gcnn = getconnections or get_connections
+	if type(gcnn) ~= "function" then return false end
+	local ok = false
+	pcall(function()
+		for _, conn in ipairs(gcnn(Mouse.Button1Down)) do
+			ok = true
+			pcall(function()
+				if conn.Fire then
+					conn:Fire()
+				elseif conn.fire then
+					conn:fire()
+				elseif type(conn.Function) == "function" then
+					conn.Function()
+				end
+			end)
+		end
+	end)
+	return ok
+end
+
+local lastRealShot = 0
+local function doRealShot()
+	local now = tick()
+	if now - lastRealShot < 0.07 then return end
+	lastRealShot = now
+	local tool = equippedGun()
+	if not tool then return end
+	local origin = Camera.CFrame.Position
+	local hitPos = gunHit()
+	local signaled = fireMouseShootSignal()
+	fireGunRemotes(tool, hitPos, origin)
+	if not signaled then
+		pcall(function()
+			if type(mouse1click) == "function" then mouse1click() end
+		end)
+	end
 end
 
 local silentHooked = false
@@ -917,20 +1056,15 @@ end
 
 -- ── Kill aura ──────────────────────────────────────────────────
 local function fireGun()
-	local c = char()
-	if c then
-		local tool = c:FindFirstChildOfClass("Tool")
-		if tool then pcall(function() tool:Activate() end) end
-	end
-	pcall(function()
-		if mouse1click then mouse1click() return end
-	end)
-	pcall(function()
-		VIM:SendMouseButtonEvent(0, 0, 0, true, game, 0)
-		task.wait()
-		VIM:SendMouseButtonEvent(0, 0, 0, false, game, 0)
-	end)
+	doRealShot()
 end
+
+addConn("gunFire", RunService.Heartbeat:Connect(function()
+	if not S.toggles.rapidFire then return end
+	if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then return end
+	if not equippedGun() then return end
+	doRealShot()
+end))
 
 local function setKillAura(on)
 	S.toggles.killAura = on == true
@@ -2183,7 +2317,7 @@ verL.Font = Enum.Font.GothamMedium
 verL.TextSize = 9
 verL.TextColor3 = C.accent2
 verL.TextXAlignment = Enum.TextXAlignment.Left
-verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.4.4" or "CALI  ·  HUB  ·  v1.4.4"
+verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.4.5" or "CALI  ·  HUB  ·  v1.4.5"
 verL.ZIndex = 7
 verL.Parent = header
 
@@ -2330,7 +2464,7 @@ footR.Parent = footer
 task.spawn(function()
 	while footer.Parent do
 		local tag = isVoiceServer() and "VC" or "main"
-		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.4.4"
+		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.4.5"
 		task.wait(2)
 	end
 end)
@@ -2932,8 +3066,18 @@ makeToggle(guns, { id = "noRecoil", title = "No Recoil", callback = function(on)
 makeToggle(guns, { id = "noSpread", title = "No Spread", callback = function(on) S.toggles.noSpread = on end })
 makeToggle(guns, { id = "infAmmo", title = "Infinite Ammo", callback = function(on) S.toggles.infAmmo = on end })
 makeToggle(guns, { id = "noJam", title = "Never Jam", callback = function(on) S.toggles.noJam = on end })
-makeToggle(guns, { id = "rapidFire", title = "Rapid Fire / no cooldown", callback = function(on) S.toggles.rapidFire = on end })
-makeToggle(guns, { id = "oneShot", title = "One Shot Damage", callback = function(on) S.toggles.oneShot = on end })
+makeToggle(guns, {
+	id = "rapidFire",
+	title = "Rapid Fire / no cooldown",
+	tip = "Fires the real gun script (mouse + remotes). Activate-only was just shells.",
+	callback = function(on) S.toggles.rapidFire = on end,
+})
+makeToggle(guns, {
+	id = "oneShot",
+	title = "One Shot Damage",
+	tip = "Boosts local damage stats. Server still has to accept the shot.",
+	callback = function(on) S.toggles.oneShot = on end,
+})
 makeToggle(guns, {
 	id = "ghostGun", title = "Ghost Gun (invisible, still shoots)",
 	tip = "Hides the gun mesh. Tool stays equipped so you can fire.",
