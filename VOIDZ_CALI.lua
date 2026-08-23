@@ -1,6 +1,6 @@
 --[[
   VOIDZ HUB — Cali Shootout
-  Build 2026-08-23-1.5.1  |  Key: VOIDZHUB  |  RightShift toggle
+  Build 2026-08-23-1.5.2  |  Key: VOIDZHUB  |  RightShift toggle
   Places: 12077443856 (main) + 16940099758 (Voice Chat)
 ]]
 
@@ -23,7 +23,7 @@ local Mouse = LP:GetMouse()
 local Camera = Workspace.CurrentCamera
 
 local HUB_NAME = "VOIDZ"
-local BUILD = "2026-08-23-1.5.1"
+local BUILD = "2026-08-23-1.5.2"
 print("[VOIDZ CALI] booting " .. BUILD)
 warn("[VOIDZ CALI] booting " .. BUILD)
 task.spawn(function()
@@ -846,10 +846,10 @@ end
 
 local function isGunConfig(t)
 	local n = 0
-	if t.Ammo ~= nil or t.ammo ~= nil or t.Clip ~= nil or t.Mag ~= nil or t.MaxAmmo ~= nil then n += 1 end
-	if t.Damage ~= nil or t.damage ~= nil then n += 1 end
-	if t.Recoil ~= nil or t.recoil ~= nil or t.Spread ~= nil or t.spread ~= nil then n += 1 end
-	if t.FireRate ~= nil or t.Cooldown ~= nil or t.Delay ~= nil then n += 1 end
+	if t.Ammo ~= nil or t.ammo ~= nil or t.Clip ~= nil or t.Mag ~= nil or t.MaxAmmo ~= nil then n = n + 1 end
+	if t.Damage ~= nil or t.damage ~= nil then n = n + 1 end
+	if t.Recoil ~= nil or t.recoil ~= nil or t.Spread ~= nil or t.spread ~= nil then n = n + 1 end
+	if t.FireRate ~= nil or t.Cooldown ~= nil or t.Delay ~= nil then n = n + 1 end
 	return n >= 2
 end
 
@@ -999,7 +999,7 @@ local function fireGunRemotes(tool, hitPos, origin)
 	local function try(r)
 		if fired >= 4 then return end
 		if skipRemoteName(r.Name) then return end
-		fired += 1
+		fired = fired + 1
 		pcall(function() r:FireServer(hitPos) end)
 		pcall(function() r:FireServer(origin, hitPos) end)
 	end
@@ -1227,12 +1227,12 @@ local function setFly(on)
 		if not r then return end
 		local cam = Workspace.CurrentCamera
 		local dir = Vector3.zero
-		if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir += cam.CFrame.LookVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir -= cam.CFrame.LookVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir -= cam.CFrame.RightVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir += cam.CFrame.RightVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.Space) then dir += Vector3.new(0, 1, 0) end
-		if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then dir -= Vector3.new(0, 1, 0) end
+		if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir = dir + cam.CFrame.LookVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir = dir - cam.CFrame.LookVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir = dir - cam.CFrame.RightVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir = dir + cam.CFrame.RightVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.Space) then dir = dir + Vector3.new(0, 1, 0) end
+		if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then dir = dir - Vector3.new(0, 1, 0) end
 		pcall(function()
 			r.AssemblyLinearVelocity = Vector3.zero
 			if dir.Magnitude > 0.05 then
@@ -1282,7 +1282,7 @@ local function getCarModel(seat)
 		local n = 0
 		for _, p in ipairs(m:GetDescendants()) do
 			if p:IsA("BasePart") then
-				n += 1
+				n = n + 1
 				if n > 3 then return m end
 			end
 		end
@@ -1435,15 +1435,15 @@ local function carFlyFrame(dt, doMove)
 	local right = flattenXZ(cam.RightVector) or Vector3.new(1, 0, 0)
 	if doMove then
 		local dir = Vector3.zero
-		if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir += look end
-		if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir -= look end
-		if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir -= right end
-		if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir += right end
+		if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir = dir + look end
+		if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir = dir - look end
+		if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir = dir - right end
+		if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir = dir + right end
 		if UserInputService:IsKeyDown(Enum.KeyCode.Space) or UserInputService:IsKeyDown(Enum.KeyCode.E) then
-			dir += Vector3.new(0, 1, 0)
+			dir = dir + Vector3.new(0, 1, 0)
 		end
 		if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or UserInputService:IsKeyDown(Enum.KeyCode.Q) then
-			dir -= Vector3.new(0, 1, 0)
+			dir = dir - Vector3.new(0, 1, 0)
 		end
 		local spd = S.carFlySpeed or 110
 		local pos = car.flyCF.Position
@@ -2505,7 +2505,7 @@ verL.Font = Enum.Font.GothamMedium
 verL.TextSize = 9
 verL.TextColor3 = C.accent2
 verL.TextXAlignment = Enum.TextXAlignment.Left
-verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.5.1" or "CALI  ·  HUB  ·  v1.5.1"
+verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.5.2" or "CALI  ·  HUB  ·  v1.5.2"
 verL.ZIndex = 7
 verL.Parent = header
 
@@ -2652,7 +2652,7 @@ footR.Parent = footer
 task.spawn(function()
 	while footer.Parent do
 		local tag = isVoiceServer() and "VC" or "main"
-		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.5.1"
+		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.5.2"
 		task.wait(2)
 	end
 end)
@@ -2678,7 +2678,7 @@ end
 
 local orderN = 0
 local function n()
-	orderN += 1
+	orderN = orderN + 1
 	return orderN
 end
 

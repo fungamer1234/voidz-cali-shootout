@@ -31,8 +31,7 @@ print("[VOIDZ] loader banner parent=" .. tostring(sg.Parent))
 
 local urls = {
 	"https://raw.githubusercontent.com/fungamer1234/voidz-cali-shootout/main/VOIDZ_CALI.lua",
-	"https://raw.githubusercontent.com/fungamer1234/voidz-cali-shootout/a6471c557525ef324c4b8b45628f2c1992ce5538/VOIDZ_CALI.lua",
-	"https://cdn.jsdelivr.net/gh/fungamer1234/voidz-cali-shootout@a6471c557525ef324c4b8b45628f2c1992ce5538/VOIDZ_CALI.lua",
+	"https://github.com/fungamer1234/voidz-cali-shootout/raw/main/VOIDZ_CALI.lua",
 }
 
 local function httpget(u)
@@ -70,9 +69,14 @@ if type(src) ~= "string" then
 end
 
 t.Text = "VOIDZ: running " .. tostring(#src) .. " bytes"
-local fn, err = loadstring(src)
+local compile = loadstring or load
+local fn, err = compile(src)
 if not fn then
-	t.Text = "VOIDZ PARSE ERROR"
+	t.TextWrapped = true
+	t.TextSize = 16
+	t.Size = UDim2.new(1, 0, 0, 90)
+	t.Text = "PARSE: " .. tostring(err)
+	warn("[VOIDZ PARSE] " .. tostring(err))
 	error(err)
 end
 local ok, runErr = pcall(fn)
