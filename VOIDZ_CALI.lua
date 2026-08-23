@@ -1,6 +1,6 @@
 --[[
   VOIDZ HUB — Cali Shootout
-  Build 2026-08-23-1.4.9  |  Key: VOIDZHUB  |  RightShift toggle
+  Build 2026-08-23-1.5.0  |  Key: VOIDZHUB  |  RightShift toggle
   Places: 12077443856 (main) + 16940099758 (Voice Chat)
 ]]
 
@@ -23,8 +23,9 @@ local Mouse = LP:GetMouse()
 local Camera = Workspace.CurrentCamera
 
 local HUB_NAME = "VOIDZ"
-local BUILD = "2026-08-23-1.4.9"
+local BUILD = "2026-08-23-1.5.0"
 print("[VOIDZ CALI] booting " .. BUILD)
+warn("[VOIDZ CALI] booting " .. BUILD)
 local ACCESS_KEY = "VOIDZHUB"
 local CALI_UNIVERSE = 4263576532
 local PLACE_MAIN = 12077443856
@@ -231,6 +232,12 @@ local function promptIn(inst)
 end
 
 local function pickGuiParent()
+	-- MacSploit: CoreGui/gethui often never draws. PlayerGui always shows.
+	local pg
+	pcall(function()
+		pg = LP:FindFirstChildOfClass("PlayerGui") or LP:WaitForChild("PlayerGui", 8)
+	end)
+	if pg then return pg end
 	local hui
 	pcall(function()
 		if type(gethui) == "function" then hui = gethui() end
@@ -240,14 +247,15 @@ local function pickGuiParent()
 		return game:GetService("CoreGui")
 	end)
 	if ok and cg then return cg end
-	return LP:WaitForChild("PlayerGui", 10) or LP:FindFirstChildOfClass("PlayerGui")
+	return LP:FindFirstChildOfClass("PlayerGui")
 end
 local function protectGui(g)
 	pcall(function()
-		if syn and syn.protect_gui then syn.protect_gui(g) end
-	end)
-	pcall(function()
-		if protect_gui then protect_gui(g) end
+		g.Enabled = true
+		g.ResetOnSpawn = false
+		g.IgnoreGuiInset = true
+		g.DisplayOrder = 2147483647
+		g.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	end)
 end
 
@@ -255,7 +263,7 @@ pcall(function()
 	local q = (type(queue_on_teleport) == "function" and queue_on_teleport)
 		or (syn and (syn.queue_on_teleport or syn.queue_on_teleport))
 	if type(q) == "function" then
-		q([[loadstring(game:HttpGet("https://cdn.jsdelivr.net/gh/fungamer1234/voidz-cali-shootout@main/VOIDZ_CALI.lua", true))()]])
+		q([[loadstring(game:HttpGet("https://cdn.jsdelivr.net/gh/fungamer1234/voidz-cali-shootout@main/VOIDZ_CALI.lua"))()]])
 	end
 end)
 pcall(function()
@@ -2242,8 +2250,9 @@ do
 	gui.DisplayOrder = 200000
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	protectGui(gui)
-	gui.Parent = pickGuiParent()
-	print("[VOIDZ CALI] key UI parented to", gui.Parent and gui.Parent.Name)
+	local parent = pickGuiParent() or LP:WaitForChild("PlayerGui")
+	gui.Parent = parent
+	warn("[VOIDZ CALI] key UI parented to " .. tostring(parent and parent:GetFullName()))
 	local dim = Instance.new("Frame")
 	dim.Size = UDim2.fromScale(1, 1)
 	dim.BackgroundColor3 = C.black
@@ -2364,7 +2373,7 @@ sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 sg.IgnoreGuiInset = true
 sg.DisplayOrder = 120000
 protectGui(sg)
-sg.Parent = pickGuiParent()
+sg.Parent = pickGuiParent() or LP:WaitForChild("PlayerGui")
 
 local MAIN_W, MAIN_H = 720, 500
 local SIDE_W = 158
@@ -2451,7 +2460,7 @@ verL.Font = Enum.Font.GothamMedium
 verL.TextSize = 9
 verL.TextColor3 = C.accent2
 verL.TextXAlignment = Enum.TextXAlignment.Left
-verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.4.9" or "CALI  ·  HUB  ·  v1.4.9"
+verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.5.0" or "CALI  ·  HUB  ·  v1.5.0"
 verL.ZIndex = 7
 verL.Parent = header
 
@@ -2598,7 +2607,7 @@ footR.Parent = footer
 task.spawn(function()
 	while footer.Parent do
 		local tag = isVoiceServer() and "VC" or "main"
-		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.4.9"
+		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.5.0"
 		task.wait(2)
 	end
 end)

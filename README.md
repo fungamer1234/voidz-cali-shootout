@@ -3,28 +3,12 @@
 ## Loadstring (always at top)
 
 ```lua
-local urls = {
-	"https://raw.githubusercontent.com/fungamer1234/voidz-cali-shootout/main/VOIDZ_CALI.lua",
-	"https://cdn.jsdelivr.net/gh/fungamer1234/voidz-cali-shootout@main/VOIDZ_CALI.lua",
-}
-local src
-for i, u in ipairs(urls) do
-	local ok, body = pcall(function()
-		return game:HttpGet(u, true)
-	end)
-	print("[VOIDZ] fetch", i, ok, ok and #tostring(body) or tostring(body):sub(1, 80))
-	if ok and type(body) == "string" and body:find("VOIDZ HUB", 1, true) then
-		src = body
-		break
-	end
-end
-assert(src, "VOIDZ download failed")
-local fn, err = loadstring(src)
-assert(fn, err)
-fn()
+loadstring(game:HttpGet("https://cdn.jsdelivr.net/gh/fungamer1234/voidz-cali-shootout@main/VOIDZ_CALI.lua"))()
 ```
 
-Build: `2026-08-23-1.4.9` · Key: `VOIDZHUB` (unlocks everything)
+Build: `2026-08-23-1.5.0` · Key: `VOIDZHUB` (unlocks everything)
+
+MacSploit: UI parents to **PlayerGui**. Do **not** pass `true` as a second argument to `HttpGet`.
 
 **Xeno-compatible** (also Delta / MacSploit / Solara / Fluxus / UNC). Missing exploit APIs fall back safely.
 
@@ -56,6 +40,10 @@ Combat God keeps your **server position** in a green safe zone (spawn shield) wh
 | Misc | Anti-AFK, rejoin, server hop, unload |
 
 Merged from public Cali hubs (Express/_scripts autofarm list, Teeksaw TPs, YNC locations, MikeyHub/Airflow combat). The Luarmor copy of Express Hub is locked; this is a VOIDZ rebuild of those options so they actually run keyless.
+
+## Recent (1.5.0) — MacSploit UI
+
+ScreenGui goes to PlayerGui (MacSploit CoreGui/gethui often never draws). HttpGet is one-argument only.
 
 ## Recent (1.4.9) — boot print
 
