@@ -1,6 +1,6 @@
 --[[
   VOIDZ HUB — Cali Shootout
-  Build 2026-08-23-1.1.0  |  Key: VOIDZHUB  |  RightShift toggle
+  Build 2026-08-23-1.2.0  |  Key: VOIDZHUB  |  RightShift toggle
   Places: 12077443856 (main) + 16940099758 (Voice Chat)
 ]]
 
@@ -22,7 +22,7 @@ local Mouse = LP:GetMouse()
 local Camera = Workspace.CurrentCamera
 
 local HUB_NAME = "VOIDZ"
-local BUILD = "2026-08-23-1.1.0"
+local BUILD = "2026-08-23-1.2.0"
 local ACCESS_KEY = "VOIDZHUB"
 local CALI_UNIVERSE = 4263576532
 local PLACE_MAIN = 12077443856
@@ -141,12 +141,81 @@ local function hum()
 	return c and c:FindFirstChildOfClass("Humanoid")
 end
 local function tp(cf)
-	local r = hrp()
-	if r then
+	if typeof(cf) ~= "CFrame" then
+		cf = CFrame.new(cf)
+	end
+	local c = char()
+	if not c then return end
+	pcall(function()
+		if c.PivotTo then
+			c:PivotTo(cf)
+		elseif c.PrimaryPart then
+			c:SetPrimaryPartCFrame(cf)
+		else
+			local r = c:FindFirstChild("HumanoidRootPart")
+			if r then r.CFrame = cf end
+		end
+	end)
+end
+
+local function firePrompt(pr)
+	if not pr then return end
+	pcall(function()
+		pr.HoldDuration = 0
+		pr.MaxActivationDistance = math.max(pr.MaxActivationDistance, 20)
+	end)
+	local fired = false
+	pcall(function()
+		if type(fireproximityprompt) == "function" then
+			fireproximityprompt(pr)
+			fired = true
+		end
+	end)
+	if not fired then
 		pcall(function()
-			r.CFrame = typeof(cf) == "CFrame" and cf or CFrame.new(cf)
+			pr:InputHoldBegin()
+			task.wait(0.05)
+			pr:InputHoldEnd()
 		end)
 	end
+end
+
+local function zeroAllPrompts()
+	pcall(function()
+		for _, v in ipairs(Workspace:GetDescendants()) do
+			if v:IsA("ProximityPrompt") then
+				v.HoldDuration = 0
+			end
+		end
+	end)
+end
+
+local function equipNamed(name)
+	local c = char()
+	local bp = LP:FindFirstChildOfClass("Backpack")
+	if not c or not bp then return end
+	name = tostring(name):lower()
+	for _, t in ipairs(bp:GetChildren()) do
+		if t:IsA("Tool") and t.Name:lower() == name then
+			pcall(function() t.Parent = c end)
+		end
+	end
+end
+
+local function childPath(root, ...)
+	local n = root
+	for i = 1, select("#", ...) do
+		if not n then return nil end
+		n = n:FindFirstChild(select(i, ...))
+	end
+	return n
+end
+
+local function promptIn(inst)
+	if not inst then return nil end
+	if inst:IsA("ProximityPrompt") then return inst end
+	return inst:FindFirstChildOfClass("ProximityPrompt")
+		or inst:FindFirstChildWhichIsA("ProximityPrompt", true)
 end
 
 local function pickGuiParent()
@@ -418,16 +487,38 @@ local function setAimbot(on)
 	if not on then return end
 	addConn("aimbot", RunService.RenderStepped:Connect(function()
 		if not S.toggles.aimbot then return end
+		local holding = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
+			or UserInputService:IsKeyDown(Enum.KeyCode.E)
+		if not holding then return end
 		local t = closestInFov()
-		if not t then return end
-		local head = t.Character and t.Character:FindFirstChild("Head")
-		if head then
-			Camera.CFrame = CFrame.new(Camera.CFrame.Position, head.Position)
+		if not t or not t.Character then return end
+		local part = t.Character:FindFirstChild("Head") or t.Character:FindFirstChild("HumanoidRootPart")
+		if part then
+			Camera.CFrame = CFrame.new(Camera.CFrame.Position, part.Position)
 		end
 	end))
 end
 
--- ── Hitboxes ───────────────────────────────────────────────────
+local function setTriggerbot(on)
+	S.toggles.triggerbot = on == true
+	dropConn("trigger")
+	if not on then return end
+	addConn("trigger", RunService.RenderStepped:Connect(function()
+		if not S.toggles.triggerbot then return end
+		local tgt = Mouse.Target
+		if not tgt then return end
+		local model = tgt.Parent
+		local pl = model and Players:GetPlayerFromCharacter(model)
+		if not pl then
+			pl = model and model.Parent and Players:GetPlayerFromCharacter(model.Parent)
+		end
+		if pl and pl ~= LP and aliveP(pl) then
+			fireGun()
+		end
+	end))
+end
+
+-- ── Hitboxes (Express: HRP only, loop 0.1s) ───────────────────
 local hitboxOrig = {}
 local function setHitboxes(on)
 	S.toggles.hitbox = on == true
@@ -435,7 +526,11 @@ local function setHitboxes(on)
 	if not on then
 		for part, sz in pairs(hitboxOrig) do
 			pcall(function()
-				if part and part.Parent then part.Size = sz end
+				if part and part.Parent then
+					part.Size = sz
+					part.Transparency = 0
+					part.CanCollide = true
+				end
 			end)
 		end
 		hitboxOrig = {}
@@ -445,16 +540,13 @@ local function setHitboxes(on)
 		if not S.toggles.hitbox then return end
 		local sz = Vector3.new(S.hitboxSize, S.hitboxSize, S.hitboxSize)
 		for _, p in ipairs(Players:GetPlayers()) do
-			if aliveP(p) then
-				for _, n in ipairs({ "HumanoidRootPart", "Head", "UpperTorso", "Torso" }) do
-					local part = p.Character:FindFirstChild(n)
-					if part and part:IsA("BasePart") then
-						if not hitboxOrig[part] then hitboxOrig[part] = part.Size end
-						part.Size = sz
-						part.Transparency = 0.7
-						part.CanCollide = false
-						part.Massless = true
-					end
+			if p ~= LP and p.Character then
+				local part = p.Character:FindFirstChild("HumanoidRootPart")
+				if part and part:IsA("BasePart") then
+					if not hitboxOrig[part] then hitboxOrig[part] = part.Size end
+					part.Size = sz
+					part.Transparency = 0.7
+					part.CanCollide = false
 				end
 			end
 		end
@@ -464,13 +556,16 @@ end
 -- ── Kill aura ──────────────────────────────────────────────────
 local function fireGun()
 	local c = char()
-	if not c then return end
-	local tool = c:FindFirstChildOfClass("Tool")
-	if tool then
-		pcall(function() tool:Activate() end)
+	if c then
+		local tool = c:FindFirstChildOfClass("Tool")
+		if tool then pcall(function() tool:Activate() end) end
 	end
 	pcall(function()
+		if mouse1click then mouse1click() return end
+	end)
+	pcall(function()
 		VIM:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+		task.wait()
 		VIM:SendMouseButtonEvent(0, 0, 0, false, game, 0)
 	end)
 end
@@ -504,39 +599,47 @@ local function setNoclip(on)
 		if not S.toggles.noclip then return end
 		local c = char()
 		if not c then return end
-		for _, p in ipairs(c:GetChildren()) do
-			if p:IsA("BasePart") then p.CanCollide = false end
+		for _, p in ipairs(c:GetDescendants()) do
+			if p:IsA("BasePart") then
+				p.CanCollide = false
+			end
 		end
 	end))
 end
 
 local function setFly(on)
 	S.toggles.fly = on == true
-	local r = hrp()
-	if r then
-		local old = r:FindFirstChild("VOIDZ_Fly")
-		if old then old:Destroy() end
-		old = r:FindFirstChild("VOIDZ_FlyG")
-		if old then old:Destroy() end
-	end
 	dropConn("fly")
-	if not on or not r then return end
-	local bv = Instance.new("BodyVelocity")
-	bv.Name = "VOIDZ_Fly"
-	bv.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-	bv.Velocity = Vector3.zero
-	bv.Parent = r
-	local bg = Instance.new("BodyGyro")
-	bg.Name = "VOIDZ_FlyG"
-	bg.MaxTorque = Vector3.new(1e5, 1e5, 1e5)
-	bg.P = 9000
-	bg.Parent = r
+	local function strip()
+		local c = char()
+		if not c then return end
+		for _, n in ipairs({ "VOIDZ_Fly", "VOIDZ_FlyG" }) do
+			for _, p in ipairs(c:GetDescendants()) do
+				if p.Name == n then pcall(function() p:Destroy() end) end
+			end
+		end
+	end
+	strip()
+	if not on then return end
 	addConn("fly", RunService.RenderStepped:Connect(function()
 		if not S.toggles.fly then return end
-		r = hrp()
+		local r = hrp()
 		if not r then return end
-		if not bv.Parent then bv.Parent = r end
-		if not bg.Parent then bg.Parent = r end
+		local bv = r:FindFirstChild("VOIDZ_Fly")
+		if not bv then
+			bv = Instance.new("BodyVelocity")
+			bv.Name = "VOIDZ_Fly"
+			bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+			bv.Parent = r
+		end
+		local bg = r:FindFirstChild("VOIDZ_FlyG")
+		if not bg then
+			bg = Instance.new("BodyGyro")
+			bg.Name = "VOIDZ_FlyG"
+			bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+			bg.P = 9e4
+			bg.Parent = r
+		end
 		local cam = Workspace.CurrentCamera
 		bg.CFrame = cam.CFrame
 		local dir = Vector3.zero
@@ -546,7 +649,7 @@ local function setFly(on)
 		if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir += cam.CFrame.RightVector end
 		if UserInputService:IsKeyDown(Enum.KeyCode.Space) then dir += Vector3.new(0, 1, 0) end
 		if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then dir -= Vector3.new(0, 1, 0) end
-		bv.Velocity = dir.Magnitude > 0.05 and dir.Unit * S.flySpeed or Vector3.zero
+		bv.Velocity = dir.Magnitude > 0.05 and dir.Unit * (S.flySpeed or 80) or Vector3.zero
 	end))
 end
 
@@ -557,7 +660,9 @@ local function setInfJump(on)
 	addConn("infJump", UserInputService.JumpRequest:Connect(function()
 		if not S.toggles.infJump then return end
 		local h = hum()
+		local r = hrp()
 		if h then h:ChangeState(Enum.HumanoidStateType.Jumping) end
+		if r then r.Velocity = Vector3.new(r.Velocity.X, 50, r.Velocity.Z) end
 	end))
 end
 
@@ -572,23 +677,18 @@ local function setSpeedLoop(on)
 	end))
 end
 
--- ── Instant prompts + farms ────────────────────────────────────
-local function firePrompt(pr)
-	pcall(function()
-		if fireproximityprompt then
-			fireproximityprompt(pr)
-		else
-			pr.HoldDuration = 0
-			pr:InputHoldBegin()
-			pr:InputHoldEnd()
-		end
-	end)
-end
-
+-- ── Instant prompts + farms (Express Hub Job System paths) ─────
 local function setInstantPrompt(on)
 	S.toggles.instantPrompt = on == true
 	dropConn("prompt")
+	dropConn("promptAdd")
 	if not on then return end
+	zeroAllPrompts()
+	addConn("promptAdd", Workspace.DescendantAdded:Connect(function(d)
+		if S.toggles.instantPrompt and d:IsA("ProximityPrompt") then
+			d.HoldDuration = 0
+		end
+	end))
 	addConn("prompt", ProximityPromptService.PromptButtonHoldBegan:Connect(function(pr)
 		if S.toggles.instantPrompt then
 			pr.HoldDuration = 0
@@ -597,73 +697,194 @@ local function setInstantPrompt(on)
 	end))
 	task.spawn(function()
 		while S.toggles.instantPrompt do
-			pcall(function()
-				for _, d in ipairs(Workspace:GetDescendants()) do
-					if d:IsA("ProximityPrompt") then
-						d.HoldDuration = 0
-						d.MaxActivationDistance = math.max(d.MaxActivationDistance, 18)
-					end
-				end
-			end)
-			task.wait(1.2)
+			zeroAllPrompts()
+			task.wait(1)
 		end
 	end)
 end
 
-local function promptBlob(pr)
-	local bits = {
-		pr.Name,
-		pr.ActionText or "",
-		pr.ObjectText or "",
-		pr.Parent and pr.Parent.Name or "",
-	}
-	return table.concat(bits, " "):lower()
+local function fireJob(folderNames)
+	local jobs = Workspace:FindFirstChild("Job System")
+	if not jobs then return false end
+	local n = jobs
+	for _, name in ipairs(folderNames) do
+		n = n and n:FindFirstChild(name)
+	end
+	local pr = promptIn(n)
+	if pr then
+		firePrompt(pr)
+		return true
+	end
+	return false
 end
 
-local function farmOnce(keys)
-	local me = hrp()
-	if not me then return end
-	local best, bd
-	for _, d in ipairs(Workspace:GetDescendants()) do
-		if d:IsA("ProximityPrompt") and d.Enabled then
-			local blob = promptBlob(d)
-			local ok = false
-			for _, k in ipairs(keys) do
-				if blob:find(k, 1, true) then ok = true break end
-			end
-			if ok then
-				local part = d.Parent
-				if part:IsA("BasePart") or (part.Parent and part.Parent:IsA("BasePart")) then
-					local pos = (part:IsA("BasePart") and part.Position) or (part.Parent.Position)
-					local dist = (pos - me.Position).Magnitude
-					if not bd or dist < bd then
-						best, bd = d, dist
-					end
-				end
-			end
-		end
-	end
-	if not best then return false end
-	local part = best.Parent:IsA("BasePart") and best.Parent or best.Parent.Parent
-	if part and part:IsA("BasePart") then
-		tp(part.CFrame + Vector3.new(0, 3, 0))
-		task.wait(0.12)
-	end
-	firePrompt(best)
-	return true
-end
-
-local function startFarm(id, keys)
+local function startFarm(id, runner)
 	S.toggles[id] = true
 	task.spawn(function()
 		while S.toggles[id] do
-			pcall(farmOnce, keys)
-			task.wait(0.35)
+			pcall(runner)
+			task.wait(0.15)
 		end
 	end)
 end
 local function stopFarm(id)
 	S.toggles[id] = false
+end
+
+local function farmBoxTick()
+	zeroAllPrompts()
+	tp(CFrame.new(-1943.448, 3.408, -48.731))
+	task.wait(0.15)
+	fireJob({ "BoxPickingJob", "BOX1" })
+	equipNamed("BOX")
+	task.wait(0.25)
+	tp(CFrame.new(-1925.296, 3.108, -22.599))
+	task.wait(0.35)
+	equipNamed("BOX")
+	-- drop-off prompt near second pad
+	pcall(function()
+		local job = childPath(Workspace, "Job System", "BoxPickingJob")
+		if job then
+			for _, d in ipairs(job:GetDescendants()) do
+				if d:IsA("ProximityPrompt") then firePrompt(d) end
+			end
+		end
+	end)
+end
+
+local function farmTrashTick()
+	zeroAllPrompts()
+	tp(CFrame.new(-1384.322, 3.408, 24.332))
+	task.wait(0.15)
+	fireJob({ "GarbageJob", "BOX1" })
+	equipNamed("Garbage")
+	task.wait(0.25)
+	tp(CFrame.new(-1409.782, 3.384, 28.312))
+	task.wait(0.35)
+	equipNamed("Garbage")
+	pcall(function()
+		local job = childPath(Workspace, "Job System", "GarbageJob")
+		if job then
+			for _, d in ipairs(job:GetDescendants()) do
+				if d:IsA("ProximityPrompt") then firePrompt(d) end
+			end
+		end
+	end)
+end
+
+local function farmMopTick()
+	pcall(function()
+		local r = game:GetService("ReplicatedStorage"):FindFirstChild("giveMop")
+		if r then r:FireServer() end
+	end)
+	equipNamed("Mop")
+	local dirt = childPath(Workspace, "Cleaning_System", "Dirt_Spawn")
+	if not dirt then
+		tp(CFrame.new(-1655.082, 3.508, 42.390))
+		task.wait(0.4)
+		dirt = childPath(Workspace, "Cleaning_System", "Dirt_Spawn")
+	end
+	if not dirt then return end
+	for _, d in ipairs(dirt:GetDescendants()) do
+		if not S.toggles.farmMop then return end
+		if d:IsA("ProximityPrompt") then
+			local part = d.Parent
+			if part and part:IsA("BasePart") then
+				tp(part.CFrame + Vector3.new(0, 3, 0))
+				task.wait(0.2)
+			end
+			firePrompt(d)
+			task.wait(0.15)
+		end
+	end
+end
+
+local function farmCarTick()
+	local folder = Workspace:FindFirstChild("CarRobberys") or Workspace:FindFirstChild("CarRobberies")
+	if not folder then return end
+	for _, d in ipairs(folder:GetDescendants()) do
+		if not S.toggles.farmCar then return end
+		if d:IsA("ProximityPrompt") then
+			local part = d.Parent
+			if part and part:IsA("BasePart") then
+				tp(CFrame.new(part.Position + Vector3.new(0, 3, 0)))
+				task.wait(0.35)
+			end
+			firePrompt(d)
+			task.wait(0.4)
+		end
+	end
+end
+
+local GRASS_CFS = {
+	CFrame.new(-1989.464, 6.795, 182.809),
+	CFrame.new(-1981.864, 6.795, 182.809),
+	CFrame.new(-1985.765, 6.795, 182.809),
+	CFrame.new(-1975.265, 6.795, 182.809),
+	CFrame.new(-1967.664, 6.795, 182.809),
+	CFrame.new(-1971.565, 6.795, 182.809),
+}
+local GRASS_SELL = CFrame.new(-2005.133, 3.490, 196.952)
+
+local function firePromptAt(cf)
+	tp(cf)
+	task.wait(0.12)
+	for _, part in ipairs(Workspace:GetDescendants()) do
+		if part:IsA("BasePart") and (part.Position - cf.Position).Magnitude < 4 then
+			local pr = part:FindFirstChildOfClass("ProximityPrompt")
+			if pr then firePrompt(pr) end
+		end
+	end
+end
+
+local function farmGrassTick()
+	for _, cf in ipairs(GRASS_CFS) do
+		if not S.toggles.farmGrass then return end
+		equipNamed("Grass")
+		firePromptAt(cf)
+		task.wait(0.35)
+		equipNamed("Grass")
+		firePromptAt(GRASS_SELL)
+		task.wait(0.35)
+	end
+end
+
+local CHECK_CFS = {
+	CFrame.new(-2405.317, 3.408, -42.879),
+	CFrame.new(-2454.812, 109.807, -218.502),
+	CFrame.new(-2450.308, 109.807, -218.224),
+	CFrame.new(-2358.493, 3.536, 131.445),
+}
+
+local function farmCheckTick()
+	zeroAllPrompts()
+	tp(CHECK_CFS[1])
+	task.wait(0.4)
+	local prompts = {
+		childPath(Workspace, "OtherItems", "CheckTable", "CloneC", "ProximityPrompt1"),
+		childPath(Workspace, "OtherItems", "CheckTable", "ActivateC", "ProximityPrompt2"),
+	}
+	pcall(function()
+		local oi = Workspace:FindFirstChild("OtherItems")
+		if oi then
+			for _, d in ipairs(oi:GetDescendants()) do
+				if d:IsA("ProximityPrompt") then
+					local blob = (d.Name .. " " .. (d.Parent and d.Parent.Name or "")):lower()
+					if blob:find("vender") or blob:find("vendor") or blob:find("check") then
+						prompts[#prompts + 1] = d
+					end
+				end
+			end
+		end
+	end)
+	for i, pr in ipairs(prompts) do
+		if not S.toggles.farmCheck then return end
+		local cf = CHECK_CFS[math.min(i + 1, #CHECK_CFS)]
+		tp(cf)
+		task.wait(0.25)
+		firePrompt(pr)
+		task.wait(0.5)
+	end
 end
 
 -- ── ESP ────────────────────────────────────────────────────────
@@ -739,32 +960,20 @@ end
 
 -- ── Teleports ──────────────────────────────────────────────────
 local TPS = {
-	{ "Gun Shop", Vector3.new(-1633.5, 7.2, -92.4) },
-	{ "Gas / Bank", Vector3.new(-1928.4, 5.1, 89.2) },
-	{ "Car Dealership", Vector3.new(-1415.4, 5.5, -115.2) },
-	{ "IceBox", Vector3.new(-1986.2, 0.5, 43.8) },
-	{ "Box Job", Vector3.new(-1920.6, 1.7, -51.2) },
-	{ "Janitor Job", Vector3.new(-1655.2, 5.0, 39.4) },
-	{ "Shop", Vector3.new(-1881.4, 0.6, 91.4) },
-	{ "Nightclub", Vector3.new(-1194.6, 5.5, -75.8) },
+	{ "Gun Shop", Vector3.new(-1667.94, 3.39, -73.62) },
+	{ "Bank", Vector3.new(-2370.30, 3.39, 70.32) },
+	{ "Car Dealer", Vector3.new(-1416.14, 3.41, -108.81) },
+	{ "Nightclub", Vector3.new(-1212.19, 3.39, -62.61) },
+	{ "Swipe / Cards", Vector3.new(-1539.55, 3.49, -321.10) },
+	{ "Mop Job", Vector3.new(-1687.66, 3.41, 32.11) },
+	{ "Box Job", Vector3.new(-1935.62, 3.01, -28.73) },
+	{ "Grass Job", Vector3.new(-2016.40, 3.41, 181.18) },
+	{ "Shop", Vector3.new(-1891.92, 3.41, 91.45) },
+	{ "Police / Diamond", Vector3.new(-2375.46, 3.41, 530.62) },
+	{ "Fake Check Station", Vector3.new(-2453.07, 109.81, -218.50) },
+	{ "Check Cashout", Vector3.new(-2358.49, 3.54, 131.45) },
 	{ "Nightclub Safe", Vector3.new(-1169.9, -13.5, -118.2) },
-	{ "Nightclub Drop", Vector3.new(-1305.3, 1.8, -191.5) },
-	{ "Chase Bank", Vector3.new(-2367.2, 5.5, 100.6) },
-	{ "Chase Safe", Vector3.new(-2324.1, 2.8, 131.7) },
-	{ "Chase Drop", Vector3.new(-2369.0, 5.8, -20.2) },
-	{ "ATM 1", Vector3.new(-1800.2, 0.2, -34.2) },
-	{ "ATM 2", Vector3.new(-1900.1, 5.1, 103.2) },
-	{ "ATM 3", Vector3.new(-1685.7, 2.5, 126.2) },
-	{ "Card Clone", Vector3.new(-1531.1, 2.4, -309.5) },
-	{ "Apartments / Check", Vector3.new(-2452.8, 110.3, -214.4) },
-	{ "Check 2", Vector3.new(-2452.3, 109.8, -222.7) },
-	{ "Check Cashout", Vector3.new(-2361.0, 5, 132.7) },
-	{ "Diamond Heist", Vector3.new(-2352, -25, -752) },
-	{ "Turf YGG", Vector3.new(-1642.4, 0.4, -537.0) },
-	{ "Turf OP", Vector3.new(-1224.6, 0.5, 76.4) },
-	{ "Turf EOK", Vector3.new(-2272.5, 2.1, -424.2) },
-	{ "Turf STB", Vector3.new(-1832.1, 2.2, 561.7) },
-	{ "Turf GM", Vector3.new(-1656.1, 2.1, 606.1) },
+	{ "IceBox", Vector3.new(-1986.2, 0.5, 43.8) },
 }
 
 -- ── Anti AFK / server ──────────────────────────────────────────
@@ -1006,7 +1215,7 @@ verL.Font = Enum.Font.GothamMedium
 verL.TextSize = 9
 verL.TextColor3 = C.accent2
 verL.TextXAlignment = Enum.TextXAlignment.Left
-verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.1.0" or "CALI  ·  HUB  ·  v1.1.0"
+verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.2.0" or "CALI  ·  HUB  ·  v1.2.0"
 verL.ZIndex = 7
 verL.Parent = header
 
@@ -1153,7 +1362,7 @@ footR.Parent = footer
 task.spawn(function()
 	while footer.Parent do
 		local tag = isVoiceServer() and "VC" or "main"
-		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.1.0"
+		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.2.0"
 		task.wait(2)
 	end
 end)
@@ -1669,7 +1878,16 @@ makeToggle(combat, {
 	id = "silentAim", title = "Silent Aim",
 	callback = function(on) S.toggles.silentAim = on if on then installSilentAim() end end,
 })
-makeToggle(combat, { id = "aimbot", title = "Hard Aimbot (camera)", callback = setAimbot })
+makeToggle(combat, {
+	id = "aimbot", title = "Aimbot (hold RMB / E)",
+	tip = "Express-style camera lock while holding right click.",
+	callback = setAimbot,
+})
+makeToggle(combat, {
+	id = "triggerbot", title = "Triggerbot",
+	tip = "Clicks when your mouse is on a player.",
+	callback = setTriggerbot,
+})
 makeSlider(combat, { title = "Silent FOV", min = 20, max = 360, get = function() return S.silentFov end, set = function(v) S.silentFov = v end })
 section(combat, "HITBOX / AURA")
 makeToggle(combat, { id = "hitbox", title = "Hitbox Expander", callback = setHitboxes })
@@ -1708,29 +1926,37 @@ makeToggle(guns, { id = "oneShot", title = "One Shot Damage", callback = functio
 section(farm, "AUTOFARM")
 makeToggle(farm, { id = "instantPrompt", title = "Instant Prompts", callback = setInstantPrompt })
 makeToggle(farm, {
-	id = "farmBox", title = "Auto Box / Crate",
-	callback = function(on) if on then startFarm("farmBox", { "box", "crate", "package", "parcel" }) else stopFarm("farmBox") end end,
+	id = "farmBox", title = "Auto Box",
+	tip = "Job System.BoxPickingJob — Express path.",
+	callback = function(on) if on then startFarm("farmBox", farmBoxTick) else stopFarm("farmBox") end end,
 })
 makeToggle(farm, {
-	id = "farmTrash", title = "Auto Garbage / Trash",
-	callback = function(on) if on then startFarm("farmTrash", { "trash", "garbage", "bag", "dump" }) else stopFarm("farmTrash") end end,
+	id = "farmTrash", title = "Auto Garbage",
+	tip = "Job System.GarbageJob.",
+	callback = function(on) if on then startFarm("farmTrash", farmTrashTick) else stopFarm("farmTrash") end end,
 })
 makeToggle(farm, {
-	id = "farmMop", title = "Auto Janitor / Mop",
-	callback = function(on) if on then startFarm("farmMop", { "mop", "clean", "janitor", "spill" }) else stopFarm("farmMop") end end,
+	id = "farmMop", title = "Auto Mop / Janitor",
+	tip = "giveMop remote + Dirt_Spawn prompts.",
+	callback = function(on) if on then startFarm("farmMop", farmMopTick) else stopFarm("farmMop") end end,
 })
 makeToggle(farm, {
 	id = "farmCar", title = "Auto Car Rob",
-	callback = function(on) if on then startFarm("farmCar", { "car", "lock", "steal", "vehicle", "hotwire" }) else stopFarm("farmCar") end end,
+	tip = "workspace.CarRobberys prompts.",
+	callback = function(on) if on then startFarm("farmCar", farmCarTick) else stopFarm("farmCar") end end,
 })
 makeToggle(farm, {
-	id = "farmGrass", title = "Auto Grass / Leaf",
-	callback = function(on) if on then startFarm("farmGrass", { "grass", "leaf", "weed", "plant" }) else stopFarm("farmGrass") end end,
+	id = "farmGrass", title = "Auto Grass",
+	callback = function(on) if on then startFarm("farmGrass", farmGrassTick) else stopFarm("farmGrass") end end,
+})
+makeToggle(farm, {
+	id = "farmCheck", title = "Auto Fake Checks",
+	tip = "Go near the bank first if it stalls.",
+	callback = function(on) if on then startFarm("farmCheck", farmCheckTick) else stopFarm("farmCheck") end end,
 })
 section(farm, "CHECK PRINTER")
-makeButton(farm, { title = "TP Check 1", callback = function() tp(CFrame.new(-2397.8, 109.8, -220.8)) end })
-makeButton(farm, { title = "TP Check 2", callback = function() tp(CFrame.new(-2452.3, 109.8, -222.7)) end })
-makeButton(farm, { title = "TP Check Cashout", callback = function() tp(CFrame.new(-2361, 5, 132.7)) end })
+makeButton(farm, { title = "TP Check Station", callback = function() tp(CFrame.new(-2453.07, 109.81, -218.50)) end })
+makeButton(farm, { title = "TP Check Cashout", callback = function() tp(CFrame.new(-2358.49, 3.54, 131.45)) end })
 
 -- MOVE
 section(move, "MOVEMENT")
@@ -1805,6 +2031,37 @@ makeButton(ply, { title = "Unspectate", callback = function()
 end })
 
 -- MISC
+section(misc, "TEAMS / CODES")
+makeButton(misc, { title = "Team: Civilian", callback = function()
+	pcall(function()
+		game:GetService("ReplicatedStorage"):WaitForChild("TeamChangeRequestEvent"):FireServer("Civilian")
+	end)
+end })
+makeButton(misc, { title = "Team: Prisoner", callback = function()
+	pcall(function()
+		game:GetService("ReplicatedStorage"):WaitForChild("TeamChangeRequestEvent"):FireServer("Prisoner")
+	end)
+end })
+makeButton(misc, { title = "Team: Police", callback = function()
+	pcall(function()
+		game:GetService("ReplicatedStorage"):WaitForChild("TeamChangeRequestEvent"):FireServer("Police")
+	end)
+end })
+makeButton(misc, {
+	title = "Redeem promo codes",
+	tip = "codeEvent — Aim, SPIN, JEWELRY, NIGHTCLUB, WINTER, ELECTRIC",
+	callback = function()
+		task.spawn(function()
+			local ev = game:GetService("ReplicatedStorage"):FindFirstChild("codeEvent")
+			if not ev then notify(HUB_NAME, "No codeEvent", 1.5) return end
+			for _, code in ipairs({ "Aim", "AIM", "SPIN", "JEWELRY", "NIGHTCLUB", "WINTER", "ELECTRIC", "ELECTRICTRIC", "BOSS" }) do
+				pcall(function() ev:FireServer(code) end)
+				task.wait(0.4)
+			end
+			notify(HUB_NAME, "Codes fired", 1.4)
+		end)
+	end,
+})
 section(misc, "SERVER")
 makeToggle(misc, { id = "antiAfk", title = "Anti AFK", callback = setAntiAfk })
 makeButton(misc, { title = "Rejoin", callback = function()
