@@ -3,10 +3,10 @@
 ## Loadstring (always at top)
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/fungamer1234/voidz-cali-shootout/main/VOIDZ_CALI.lua", true))()
+loadstring(game:HttpGet("https://cdn.jsdelivr.net/gh/fungamer1234/voidz-cali-shootout@main/VOIDZ_CALI.lua", true))()
 ```
 
-Build: `2026-08-23-1.4.7` · Key: `VOIDZHUB` (unlocks everything)
+Build: `2026-08-23-1.4.8` · Key: `VOIDZHUB` (unlocks everything)
 
 **Xeno-compatible** (also Delta / MacSploit / Solara / Fluxus / UNC). Missing exploit APIs fall back safely.
 
@@ -38,6 +38,10 @@ Combat God keeps your **server position** in a green safe zone (spawn shield) wh
 | Misc | Anti-AFK, rejoin, server hop, unload |
 
 Merged from public Cali hubs (Express/_scripts autofarm list, Teeksaw TPs, YNC locations, MikeyHub/Airflow combat). The Luarmor copy of Express Hub is locked; this is a VOIDZ rebuild of those options so they actually run keyless.
+
+## Recent (1.4.8) — loadstring
+
+GitHub `raw.githubusercontent.com/main` was serving a stale file. Use the jsDelivr loadstring at the top.
 
 ## Recent (1.4.7) — TCS off, Express ammo, parked-zone god
 

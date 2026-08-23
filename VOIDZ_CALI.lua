@@ -1,6 +1,6 @@
 --[[
   VOIDZ HUB — Cali Shootout
-  Build 2026-08-23-1.4.7  |  Key: VOIDZHUB  |  RightShift toggle
+  Build 2026-08-23-1.4.8  |  Key: VOIDZHUB  |  RightShift toggle
   Places: 12077443856 (main) + 16940099758 (Voice Chat)
 ]]
 
@@ -23,7 +23,7 @@ local Mouse = LP:GetMouse()
 local Camera = Workspace.CurrentCamera
 
 local HUB_NAME = "VOIDZ"
-local BUILD = "2026-08-23-1.4.7"
+local BUILD = "2026-08-23-1.4.8"
 local ACCESS_KEY = "VOIDZHUB"
 local CALI_UNIVERSE = 4263576532
 local PLACE_MAIN = 12077443856
@@ -246,7 +246,7 @@ pcall(function()
 	local q = (type(queue_on_teleport) == "function" and queue_on_teleport)
 		or (syn and (syn.queue_on_teleport or syn.queue_on_teleport))
 	if type(q) == "function" then
-		q([[loadstring(game:HttpGet("https://raw.githubusercontent.com/fungamer1234/voidz-cali-shootout/main/VOIDZ_CALI.lua", true))()]])
+		q([[loadstring(game:HttpGet("https://cdn.jsdelivr.net/gh/fungamer1234/voidz-cali-shootout@main/VOIDZ_CALI.lua", true))()]])
 	end
 end)
 pcall(function()
@@ -2439,7 +2439,7 @@ verL.Font = Enum.Font.GothamMedium
 verL.TextSize = 9
 verL.TextColor3 = C.accent2
 verL.TextXAlignment = Enum.TextXAlignment.Left
-verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.4.7" or "CALI  ·  HUB  ·  v1.4.7"
+verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.4.8" or "CALI  ·  HUB  ·  v1.4.8"
 verL.ZIndex = 7
 verL.Parent = header
 
@@ -2586,7 +2586,7 @@ footR.Parent = footer
 task.spawn(function()
 	while footer.Parent do
 		local tag = isVoiceServer() and "VC" or "main"
-		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.4.7"
+		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.4.8"
 		task.wait(2)
 	end
 end)
