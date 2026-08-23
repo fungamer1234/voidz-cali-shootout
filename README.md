@@ -6,7 +6,7 @@
 loadstring(game:HttpGet("https://raw.githubusercontent.com/fungamer1234/voidz-cali-shootout/main/VOIDZ_CALI.lua", true))()
 ```
 
-Build: `2026-08-23-1.4.5` · Key: `VOIDZHUB` (unlocks everything)
+Build: `2026-08-23-1.4.6` · Key: `VOIDZHUB` (unlocks everything)
 
 **Xeno-compatible** (also Delta / MacSploit / Solara / Fluxus / UNC). Missing exploit APIs fall back safely.
 
@@ -20,7 +20,7 @@ GitHub: https://github.com/fungamer1234/voidz-cali-shootout
 
 ## Combat God
 
-Cali’s real “god” is the green **safe zones** / spawn shield the server puts on you. Combat God spoofs touching those zone parts (`firetouchinterest`) so you get that same ForceField — it does **not** hook `__namecall` or create a fake FF (that was the 267 kick). TPs tab has **Nearest Safe Zone**.
+Combat God keeps your **server position** in a green safe zone (spawn shield) while you still walk around on your screen. It does **not** hook `__namecall`. TPs tab has **Nearest Safe Zone**.
 
 ## Tabs
 
@@ -38,6 +38,10 @@ Cali’s real “god” is the green **safe zones** / spawn shield the server pu
 | Misc | Anti-AFK, rejoin, server hop, unload |
 
 Merged from public Cali hubs (Express/_scripts autofarm list, Teeksaw TPs, YNC locations, MikeyHub/Airflow combat). The Luarmor copy of Express Hub is locked; this is a VOIDZ rebuild of those options so they actually run keyless.
+
+## Recent (1.4.6) — cars, ammo, god, health ESP
+
+Accel no longer welds you in a straight line (A/D steers again). Car fly stays upright. Infinite ammo fills the real mag size and **No Reload** blocks R. Combat God desyncs you into a safe zone on the server. Health Esp is on Home and Visuals.
 
 ## Recent (1.4.5) — gun mods actually shoot
 
