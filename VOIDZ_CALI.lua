@@ -1,6 +1,6 @@
 --[[
   VOIDZ HUB — Cali Shootout
-  Build 2026-08-23-1.4.2  |  Key: VOIDZHUB  |  RightShift toggle
+  Build 2026-08-23-1.4.3  |  Key: VOIDZHUB  |  RightShift toggle
   Places: 12077443856 (main) + 16940099758 (Voice Chat)
 ]]
 
@@ -14,6 +14,7 @@ local StarterGui = game:GetService("StarterGui")
 local HttpService = game:GetService("HttpService")
 local VIM = game:GetService("VirtualInputManager")
 local ProximityPromptService = game:GetService("ProximityPromptService")
+local CollectionService = game:GetService("CollectionService")
 local Workspace = workspace
 
 local LP = Players.LocalPlayer
@@ -22,7 +23,7 @@ local Mouse = LP:GetMouse()
 local Camera = Workspace.CurrentCamera
 
 local HUB_NAME = "VOIDZ"
-local BUILD = "2026-08-23-1.4.2"
+local BUILD = "2026-08-23-1.4.3"
 local ACCESS_KEY = "VOIDZHUB"
 local CALI_UNIVERSE = 4263576532
 local PLACE_MAIN = 12077443856
@@ -297,8 +298,172 @@ local function cashOf(p)
 end
 
 -- ── Combat God ─────────────────────────────────────────────────
--- Do NOT hook __namecall / Instance methods or parent ForceFields to
--- Character — Cali's AC kicks (267) for "namecall / instance detector".
+-- Do NOT hook __namecall or Instance.new ForceField (Cali 267 kick).
+-- Real protection is the map's green safe zones / spawn shield — spoof
+-- being inside those parts so the SERVER gives the same ForceField.
+local ZONE_TAGS = { "SafeZone", "Safezone", "Safe", "NoPvP", "SpawnProtection", "GreenZone" }
+local SAFE_FALLBACK = {
+	Vector3.new(-1667.94, 3.39, -73.62), -- gun shop
+	Vector3.new(-1633.50, 7.20, -92.36),
+	Vector3.new(-1891.92, 3.41, 91.45), -- shop
+}
+
+local function zoneNameHit(n)
+	n = tostring(n or ""):lower():gsub("[%s_%-]", "")
+	return n:find("safezone", 1, true)
+		or n:find("safepart", 1, true)
+		or n:find("spawnprotect", 1, true)
+		or n:find("nopvp", 1, true)
+		or n:find("greenzone", 1, true)
+		or n:find("protectionzone", 1, true)
+		or n == "safe"
+		or n == "protected"
+end
+
+local function looksLikeZoneVolume(p)
+	if not p:IsA("BasePart") then return false end
+	if p.CanCollide then return false end
+	local s = p.Size
+	if math.min(s.X, s.Z) < 16 then return false end
+	if (p.Transparency or 0) < 0.15 then return false end
+	local c = p.Color
+	return c.G > 0.42 and c.G > c.R * 1.12
+end
+
+local function collectZoneParts()
+	local bag, seen = {}, {}
+	local function add(p)
+		if p and p:IsA("BasePart") and p.Parent and not seen[p] then
+			seen[p] = true
+			bag[#bag + 1] = p
+		end
+	end
+	pcall(function()
+		for _, tag in ipairs(ZONE_TAGS) do
+			for _, inst in ipairs(CollectionService:GetTagged(tag)) do
+				if inst:IsA("BasePart") then
+					add(inst)
+				else
+					add(inst:FindFirstChildWhichIsA("BasePart", true))
+				end
+			end
+		end
+	end)
+	pcall(function()
+		for _, d in ipairs(Workspace:GetDescendants()) do
+			if d:IsA("SpawnLocation") then
+				add(d)
+			elseif d:IsA("BasePart") and (zoneNameHit(d.Name) or looksLikeZoneVolume(d)) then
+				add(d)
+			elseif d:IsA("Folder") or d:IsA("Model") then
+				if zoneNameHit(d.Name) then
+					for _, p in ipairs(d:GetDescendants()) do
+						if p:IsA("BasePart") then add(p) end
+					end
+				end
+			end
+		end
+	end)
+	return bag
+end
+
+local zoneCache, zoneCacheAt = {}, 0
+local function getZoneParts()
+	if tick() - zoneCacheAt > 8 or #zoneCache == 0 then
+		zoneCache = collectZoneParts()
+		zoneCacheAt = tick()
+	end
+	return zoneCache
+end
+
+local function nearestZoneCF()
+	local r = hrp()
+	local origin = r and r.Position or Vector3.zero
+	local best, bestD
+	for _, p in ipairs(getZoneParts()) do
+		if p and p.Parent then
+			local d = (p.Position - origin).Magnitude
+			if not bestD or d < bestD then
+				bestD, best = d, p
+			end
+		end
+	end
+	if best then
+		return best.CFrame + Vector3.new(0, 3, 0), best
+	end
+	return CFrame.new(SAFE_FALLBACK[1] + Vector3.new(0, 3, 0)), nil
+end
+
+local function touchInterest(a, b, s)
+	local fti = firetouchinterest or fire_touch_interest or (syn and syn.fire_touch_interest)
+	if type(fti) ~= "function" then return false end
+	local ok = pcall(function() fti(a, b, s) end)
+	if not ok then
+		ok = pcall(function() fti(b, a, s) end)
+	end
+	return ok
+end
+
+local function markSafeFlags(c)
+	c = c or char()
+	if not c then return end
+	for _, a in ipairs({ "InSafeZone", "SafeZone", "Protected", "SpawnProtection", "NoPvP" }) do
+		pcall(function()
+			c:SetAttribute(a, true)
+			LP:SetAttribute(a, true)
+		end)
+		pcall(function()
+			local v = c:FindFirstChild(a) or LP:FindFirstChild(a)
+			if v and v:IsA("BoolValue") then v.Value = true end
+		end)
+	end
+end
+
+local function spoofSafeZones()
+	local r = hrp()
+	if not r then return 0 end
+	local zones = getZoneParts()
+	if #zones == 0 then return 0 end
+	local origin = r.Position
+	local live = {}
+	for _, z in ipairs(zones) do
+		if z and z.Parent then live[#live + 1] = z end
+	end
+	table.sort(live, function(a, b)
+		return (a.Position - origin).Magnitude < (b.Position - origin).Magnitude
+	end)
+	local n = 0
+	local maxN = math.min(#live, 10)
+	for i = 1, maxN do
+		local z = live[i]
+		if z and z.Parent then
+			pcall(function()
+				z.CanTouch = true
+			end)
+			if touchInterest(r, z, 0) then
+				n = n + 1
+			end
+			pcall(function()
+				if type(firesignal) == "function" and z.Touched then
+					firesignal(z.Touched, r)
+				end
+			end)
+		end
+	end
+	markSafeFlags(char())
+	return n
+end
+
+local function releaseSafeZones()
+	local r = hrp()
+	if not r then return end
+	for _, z in ipairs(zoneCache) do
+		if z and z.Parent then
+			touchInterest(r, z, 1)
+		end
+	end
+end
+
 local function refillVitals(c, h)
 	if h then
 		pcall(function()
@@ -404,20 +569,35 @@ local function applyCombatGod(h, c)
 	refillVitals(c, h)
 	keepToolEquipped(c)
 	ghostGunVisuals(c)
+	markSafeFlags(c)
 end
 
 local function setCombatGod(on)
 	S.toggles.combatGod = on == true
 	dropConn("combatGodHB")
 	dropConn("combatGodStep")
+	dropConn("combatGodZone")
 	dropConn("combatGodDied")
 	if not on then
+		releaseSafeZones()
 		restoreGhostGuns()
 		notify(HUB_NAME, "Combat God OFF", 1.2)
 		return
 	end
-	notify(HUB_NAME, "Combat God ON — no AC hooks  ·  snap-back + ghost gun", 2)
+	zoneCacheAt = 0
+	local n = spoofSafeZones()
+	notify(HUB_NAME, "Combat God ON — spoofing " .. n .. " safe zone(s) (spawn shield)", 2.4)
 	applyCombatGod(hum(), char())
+	task.delay(2.4, function()
+		if not S.toggles.combatGod then return end
+		local c = char()
+		local ff = c and c:FindFirstChildOfClass("ForceField")
+		if ff then
+			notify(HUB_NAME, "Server spawn protection is on", 2)
+		elseif n == 0 then
+			notify(HUB_NAME, "No green zones found — TP to a safe zone then re-toggle", 3)
+		end
+	end)
 	local h = hum()
 	if h then
 		addConn("combatGodDied", h.Died:Connect(function()
@@ -435,6 +615,7 @@ local function setCombatGod(on)
 				local nh = c:WaitForChild("Humanoid", 4)
 				if cf and r then pcall(function() r.CFrame = cf end) end
 				applyCombatGod(nh, c)
+				spoofSafeZones()
 			end)
 		end)
 	end
@@ -449,6 +630,13 @@ local function setCombatGod(on)
 		ghostGunVisuals(char())
 		local hh = hum()
 		if hh and hh.Health < hh.MaxHealth then hh.Health = hh.MaxHealth end
+	end))
+	local lastSpoof = 0
+	addConn("combatGodZone", RunService.Heartbeat:Connect(function()
+		if not S.toggles.combatGod then return end
+		if tick() - lastSpoof < 0.18 then return end
+		lastSpoof = tick()
+		spoofSafeZones()
 	end))
 end
 
@@ -1735,7 +1923,7 @@ verL.Font = Enum.Font.GothamMedium
 verL.TextSize = 9
 verL.TextColor3 = C.accent2
 verL.TextXAlignment = Enum.TextXAlignment.Left
-verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.4.2" or "CALI  ·  HUB  ·  v1.4.2"
+verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.4.3" or "CALI  ·  HUB  ·  v1.4.3"
 verL.ZIndex = 7
 verL.Parent = header
 
@@ -1882,7 +2070,7 @@ footR.Parent = footer
 task.spawn(function()
 	while footer.Parent do
 		local tag = isVoiceServer() and "VC" or "main"
-		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.4.2"
+		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.4.3"
 		task.wait(2)
 	end
 end)
@@ -2404,8 +2592,8 @@ end
 section(home, "QUICK")
 makeToggle(home, {
 	id = "combatGod", title = "Combat God",
-	desc = "Snap-back + ghost gun  ·  no AC hooks",
-	tip = "No namecall / ForceField — those got 267 kicked. If you drop, you snap back on respawn.",
+	desc = "Spoofs map safe zones (spawn shield)",
+	tip = "Touches the green safe-zone parts so the server gives you the same spawn protection. No namecall hook.",
 	callback = setCombatGod,
 })
 makeToggle(home, {
@@ -2423,7 +2611,7 @@ makeToggle(home, {
 section(combat, "SURVIVE")
 makeToggle(combat, {
 	id = "combatGod", title = "Combat God",
-	desc = "Snap-back + ghost gun  ·  no AC hooks",
+	desc = "Spoofs map safe zones (spawn shield)",
 	callback = setCombatGod,
 })
 makeToggle(combat, {
@@ -2675,6 +2863,16 @@ makeButton(tps, {
 	title = "Hop to main map",
 	callback = function()
 		pcall(function() TeleportService:Teleport(PLACE_MAIN, LP) end)
+	end,
+})
+makeButton(tps, {
+	title = "Nearest Safe Zone",
+	tip = "Walks you into the closest green spawn-protection circle.",
+	callback = function()
+		zoneCacheAt = 0
+		local cf = nearestZoneCF()
+		tp(cf)
+		notify(HUB_NAME, "Safe zone", 1.2)
 	end,
 })
 for _, row in ipairs(TPS) do

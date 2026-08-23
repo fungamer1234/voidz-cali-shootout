@@ -6,7 +6,7 @@
 loadstring(game:HttpGet("https://raw.githubusercontent.com/fungamer1234/voidz-cali-shootout/main/VOIDZ_CALI.lua", true))()
 ```
 
-Build: `2026-08-23-1.4.2` · Key: `VOIDZHUB` (unlocks everything)
+Build: `2026-08-23-1.4.3` · Key: `VOIDZHUB` (unlocks everything)
 
 **Xeno-compatible** (also Delta / MacSploit / Solara / Fluxus / UNC). Missing exploit APIs fall back safely.
 
@@ -20,7 +20,7 @@ GitHub: https://github.com/fungamer1234/voidz-cali-shootout
 
 ## Combat God
 
-Cali’s anti-cheat kicks (error **267**) if you hook `__namecall` or parent extra instances (ForceField, ESP) onto your character. Combat God no longer does any of that. It keeps the ghost gun, health lock, and snap-back on respawn — it will **not** make you actually immortal.
+Cali’s real “god” is the green **safe zones** / spawn shield the server puts on you. Combat God spoofs touching those zone parts (`firetouchinterest`) so you get that same ForceField — it does **not** hook `__namecall` or create a fake FF (that was the 267 kick). TPs tab has **Nearest Safe Zone**.
 
 ## Tabs
 
@@ -37,6 +37,10 @@ Cali’s anti-cheat kicks (error **267**) if you hook `__namecall` or parent ext
 | Misc | Anti-AFK, rejoin, server hop, unload |
 
 Merged from public Cali hubs (Express/_scripts autofarm list, Teeksaw TPs, YNC locations, MikeyHub/Airflow combat). The Luarmor copy of Express Hub is locked; this is a VOIDZ rebuild of those options so they actually run keyless.
+
+## Recent (1.4.3) — safe-zone Combat God
+
+Combat God uses the map’s green safe zones (the spawn-protection shield), not a fake ForceField. TPs → Nearest Safe Zone if you just want to stand in one.
 
 ## Recent (1.4.2) — anti-kick
 
