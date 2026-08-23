@@ -1,6 +1,6 @@
 --[[
   VOIDZ HUB — Cali Shootout
-  Build 2026-08-23-1.2.0  |  Key: VOIDZHUB  |  RightShift toggle
+  Build 2026-08-23-1.3.0  |  Key: VOIDZHUB  |  RightShift toggle
   Places: 12077443856 (main) + 16940099758 (Voice Chat)
 ]]
 
@@ -22,7 +22,7 @@ local Mouse = LP:GetMouse()
 local Camera = Workspace.CurrentCamera
 
 local HUB_NAME = "VOIDZ"
-local BUILD = "2026-08-23-1.2.0"
+local BUILD = "2026-08-23-1.3.0"
 local ACCESS_KEY = "VOIDZHUB"
 local CALI_UNIVERSE = 4263576532
 local PLACE_MAIN = 12077443856
@@ -61,6 +61,11 @@ local S = {
 	killRange = 80,
 	selected = nil,
 	esp = {},
+	espNameColor = Color3.new(1, 1, 1),
+	espBoxColor = Color3.new(1, 1, 1),
+	espDistColor = Color3.new(1, 1, 1),
+	espChamsColor = Color3.new(1, 1, 1),
+	camFov = 90,
 }
 
 local function tw(o, props, t)
@@ -380,56 +385,87 @@ end
 
 local function applyGunMods()
 	eachGunValue(function(obj)
-		if S.toggles.noRecoil then
-			for _, k in ipairs({ "Recoil", "recoil", "Shake", "Bloom" }) do
-				if obj:GetAttribute(k) ~= nil then pcall(function() obj:SetAttribute(k, 0) end) end
-				if obj:IsA("NumberValue") or obj:IsA("IntValue") then
-					local n = obj.Name:lower()
-					if n:find("recoil") or n:find("shake") or n:find("bloom") then
-						obj.Value = 0
+		local n = (obj.Name or ""):lower()
+		pcall(function()
+			if obj.GetAttribute then
+				for _, k in ipairs(GUN_KEYS) do
+					local v = obj:GetAttribute(k)
+					if v ~= nil then
+						if S.toggles.noRecoil and (k:lower():find("recoil") or k:lower():find("shake") or k:lower():find("bloom")) then
+							obj:SetAttribute(k, 0)
+						elseif S.toggles.noSpread and k:lower():find("spread") then
+							obj:SetAttribute(k, 0)
+						elseif S.toggles.noSpread and k:lower():find("accuracy") then
+							obj:SetAttribute(k, 1)
+						elseif S.toggles.infAmmo and (k:lower():find("ammo") or k:lower():find("clip") or k:lower():find("mag")) then
+							obj:SetAttribute(k, 999)
+						elseif S.toggles.rapidFire and (k:lower():find("cool") or k:lower():find("delay") or k:lower():find("debounce")) then
+							obj:SetAttribute(k, 0)
+						elseif S.toggles.oneShot and k:lower():find("damage") then
+							obj:SetAttribute(k, 9e4)
+						end
 					end
 				end
 			end
+		end)
+		if not (obj:IsA("NumberValue") or obj:IsA("IntValue") or obj:IsA("BoolValue")) then return end
+		if S.toggles.noRecoil and (n:find("recoil") or n:find("shake") or n:find("bloom") or n:find("kick") or n:find("cam")) then
+			obj.Value = 0
 		end
 		if S.toggles.noSpread then
-			if obj:IsA("NumberValue") or obj:IsA("IntValue") then
-				local n = obj.Name:lower()
-				if n:find("spread") or n:find("accuracy") then
-					if n:find("accuracy") then obj.Value = 1 else obj.Value = 0 end
-				end
+			if n:find("spread") or n:find("bloom") then obj.Value = 0
+			elseif n:find("accuracy") then obj.Value = typeof(obj.Value) == "number" and 1 or obj.Value
 			end
 		end
-		if S.toggles.infAmmo then
-			if obj:IsA("NumberValue") or obj:IsA("IntValue") then
-				local n = obj.Name:lower()
-				if n:find("ammo") or n:find("clip") or n:find("mag") then
-					if obj.Value < 30 then obj.Value = 999 end
-				end
-			end
+		if S.toggles.infAmmo and (n:find("ammo") or n:find("clip") or n:find("mag") or n:find("bullet") or n:find("round")) then
+			if typeof(obj.Value) == "number" and obj.Value < 999 then obj.Value = 999 end
 		end
-		if S.toggles.noJam then
-			if obj:IsA("BoolValue") and obj.Name:lower():find("jam") then obj.Value = false end
-			if obj:IsA("NumberValue") and obj.Name:lower():find("jam") then obj.Value = 0 end
+		if S.toggles.noJam and n:find("jam") then
+			obj.Value = typeof(obj.Value) == "boolean" and false or 0
 		end
 		if S.toggles.rapidFire then
-			if obj:IsA("NumberValue") or obj:IsA("IntValue") then
-				local n = obj.Name:lower()
-				if n:find("cooldown") or n:find("debounce") or n:find("delay") then
+			if n:find("cooldown") or n:find("debounce") or n:find("delay") or n:find("firerate") or n:find("rpm") then
+				if n:find("rate") or n:find("rpm") then
+					if typeof(obj.Value) == "number" then obj.Value = math.max(obj.Value, 30) end
+				else
 					obj.Value = 0
-				elseif n:find("firerate") or n:find("fire_rate") then
-					obj.Value = math.max(obj.Value, 20)
 				end
 			end
 		end
-		if S.toggles.oneShot then
-			if obj:IsA("NumberValue") or obj:IsA("IntValue") then
-				local n = obj.Name:lower()
-				if n:find("damage") then obj.Value = 9e4 end
-			end
-			if obj:GetAttribute("Damage") then pcall(function() obj:SetAttribute("Damage", 9e4) end) end
+		if S.toggles.oneShot and n:find("damage") then
+			obj.Value = 9e4
 		end
 	end)
+	if S.toggles.noRecoil then
+		local h = hum()
+		if h then pcall(function() h.CameraOffset = Vector3.zero end) end
+	end
 end
+
+local lastCamLook
+addConn("gunCam", RunService.RenderStepped:Connect(function()
+	local cam = Workspace.CurrentCamera
+	if not cam then return end
+	if S.toggles.noRecoil then
+		local h = hum()
+		if h then h.CameraOffset = Vector3.zero end
+		if lastCamLook then
+			local look = cam.CFrame.LookVector
+			if math.abs(look.Y - lastCamLook.Y) > 0.012 then
+				local dir = Vector3.new(look.X, lastCamLook.Y, look.Z)
+				if dir.Magnitude > 0.05 then
+					cam.CFrame = CFrame.new(cam.CFrame.Position, cam.CFrame.Position + dir)
+				end
+			end
+		end
+	end
+	lastCamLook = cam.CFrame.LookVector
+	if S.toggles.rapidFire and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+		local c = char()
+		local tool = c and c:FindFirstChildOfClass("Tool")
+		if tool then pcall(function() tool:Activate() end) end
+	end
+end))
 
 -- ── Silent aim / aimbot ────────────────────────────────────────
 local function worldToScreen(pos)
@@ -887,62 +923,246 @@ local function farmCheckTick()
 	end
 end
 
--- ── ESP ────────────────────────────────────────────────────────
-local function clearESP()
-	for p, gui in pairs(S.esp) do
-		pcall(function() gui:Destroy() end)
-		S.esp[p] = nil
+-- ── ESP (Express Hub: name / box / distance / chams) ───────────
+local nameDrawings = {}
+local boxAdorns = {}
+local distGuis = {}
+
+local hasDrawing = false
+pcall(function()
+	hasDrawing = Drawing ~= nil and type(Drawing.new) == "function"
+end)
+
+local function destroyNameESP()
+	for _, d in pairs(nameDrawings) do
+		pcall(function()
+			if d.Remove then d:Remove() else d:Destroy() end
+		end)
 	end
+	nameDrawings = {}
 end
 
-local function setESP(on)
-	S.toggles.esp = on == true
-	dropConn("esp")
-	if not on then
-		clearESP()
-		return
-	end
-	addConn("esp", RunService.Heartbeat:Connect(function()
-		if not S.toggles.esp then return end
-		local me = hrp()
+local function setNameESP(on)
+	S.toggles.espName = on == true
+	dropConn("espName")
+	destroyNameESP()
+	if not on then return end
+	addConn("espName", RunService.RenderStepped:Connect(function()
+		if not S.toggles.espName then return end
+		local cam = Workspace.CurrentCamera
 		for _, p in ipairs(Players:GetPlayers()) do
-			if p ~= LP and p.Character and p.Character:FindFirstChild("Head") then
-				local gui = S.esp[p]
-				if not gui or not gui.Parent then
-					gui = Instance.new("BillboardGui")
-					gui.Name = "VOIDZ_ESP"
-					gui.Size = UDim2.fromOffset(160, 42)
-					gui.AlwaysOnTop = true
-					gui.StudsOffset = Vector3.new(0, 2.6, 0)
-					local tl = Instance.new("TextLabel")
-					tl.BackgroundTransparency = 1
-					tl.Size = UDim2.fromScale(1, 1)
-					tl.Font = Enum.Font.GothamBold
-					tl.TextSize = 12
-					tl.TextColor3 = C.accent2
-					tl.TextStrokeTransparency = 0.4
-					tl.Parent = gui
-					gui.Parent = p.Character.Head
-					S.esp[p] = gui
+			if p ~= LP and p.Character then
+				local head = p.Character:FindFirstChild("Head")
+				local hrpP = p.Character:FindFirstChild("HumanoidRootPart")
+				local part = head or hrpP
+				if part then
+					local v, onScreen = cam:WorldToViewportPoint(part.Position)
+					local d = nameDrawings[p]
+					if hasDrawing then
+						if not d then
+							d = Drawing.new("Text")
+							d.Size = 14
+							d.Center = true
+							d.Outline = true
+							d.Transparency = 0.15
+							nameDrawings[p] = d
+						end
+						d.Text = p.Name
+						d.Color = S.espNameColor
+						d.Position = Vector2.new(v.X, v.Y - 25)
+						d.Visible = onScreen
+					else
+						if not d or not d.Parent then
+							d = Instance.new("BillboardGui")
+							d.Name = "VOIDZ_NameESP"
+							d.Size = UDim2.fromOffset(120, 18)
+							d.AlwaysOnTop = true
+							d.StudsOffset = Vector3.new(0, 2.4, 0)
+							local tl = Instance.new("TextLabel")
+							tl.BackgroundTransparency = 1
+							tl.Size = UDim2.fromScale(1, 1)
+							tl.Font = Enum.Font.GothamBold
+							tl.TextSize = 12
+							tl.TextStrokeTransparency = 0.4
+							tl.Parent = d
+							d.Parent = part
+							nameDrawings[p] = d
+						end
+						local tl = d:FindFirstChildOfClass("TextLabel")
+						if tl then
+							tl.Text = p.Name
+							tl.TextColor3 = S.espNameColor
+						end
+						if d.Parent ~= part then d.Parent = part end
+					end
 				end
-				local h = p.Character:FindFirstChildOfClass("Humanoid")
-				local r = p.Character:FindFirstChild("HumanoidRootPart")
-				local dist = (me and r) and math.floor((me.Position - r.Position).Magnitude) or 0
-				local cash = cashOf(p)
-				local label = gui:FindFirstChildOfClass("TextLabel")
-				if label then
-					label.Text = string.format("%s  [%d hp]\n%d studs  $%s",
-						p.DisplayName ~= "" and p.DisplayName or p.Name,
-						h and math.floor(h.Health) or 0,
-						dist,
-						tostring(cash))
-				end
-			elseif S.esp[p] then
-				pcall(function() S.esp[p]:Destroy() end)
-				S.esp[p] = nil
+			elseif nameDrawings[p] then
+				pcall(function()
+					local d = nameDrawings[p]
+					if d.Remove then d:Remove() elseif d.Destroy then d:Destroy() end
+				end)
+				nameDrawings[p] = nil
 			end
 		end
 	end))
+end
+
+local function removeBoxESP(p)
+	local b = boxAdorns[p]
+	if b then pcall(function() b:Destroy() end) boxAdorns[p] = nil end
+end
+
+local function setBoxESP(on)
+	S.toggles.espBox = on == true
+	dropConn("espBox")
+	if not on then
+		for p in pairs(boxAdorns) do removeBoxESP(p) end
+		return
+	end
+	addConn("espBox", RunService.Heartbeat:Connect(function()
+		if not S.toggles.espBox then return end
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p ~= LP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+				local box = boxAdorns[p]
+				if not box or not box.Parent then
+					box = Instance.new("BoxHandleAdornment")
+					box.Name = "VOIDZ_BoxESP"
+					box.Size = Vector3.new(2, 5, 1)
+					box.AlwaysOnTop = true
+					box.ZIndex = 2
+					box.Transparency = 0.5
+					box.Parent = p.Character
+					boxAdorns[p] = box
+				end
+				box.Adornee = p.Character.HumanoidRootPart
+				box.Color3 = S.espBoxColor
+			else
+				removeBoxESP(p)
+			end
+		end
+	end))
+end
+
+local function setDistanceESP(on)
+	S.toggles.espDist = on == true
+	if not on then
+		for p, g in pairs(distGuis) do
+			pcall(function() g:Destroy() end)
+			distGuis[p] = nil
+		end
+		dropConn("espDist")
+		return
+	end
+	dropConn("espDist")
+	addConn("espDist", RunService.RenderStepped:Connect(function()
+		if not S.toggles.espDist then return end
+		local cam = Workspace.CurrentCamera
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p ~= LP and p.Character then
+				local r = p.Character:FindFirstChild("HumanoidRootPart")
+				if r then
+					local g = distGuis[p]
+					if not g or not g.Parent then
+						g = Instance.new("BillboardGui")
+						g.Name = "VOIDZ_DistESP"
+						g.Size = UDim2.fromOffset(70, 28)
+						g.AlwaysOnTop = true
+						g.StudsOffset = Vector3.new(3, 0, 0)
+						g.Adornee = r
+						g.Parent = r
+						local tl = Instance.new("TextLabel")
+						tl.BackgroundTransparency = 1
+						tl.Size = UDim2.fromScale(1, 1)
+						tl.Font = Enum.Font.GothamBold
+						tl.TextScaled = true
+						tl.TextStrokeTransparency = 0.5
+						tl.Parent = g
+						distGuis[p] = g
+					end
+					local tl = g:FindFirstChildOfClass("TextLabel")
+					if tl then
+						tl.TextColor3 = S.espDistColor
+						tl.Text = string.format("Distance: %d", math.floor((r.Position - cam.CFrame.Position).Magnitude))
+					end
+					if g.Parent ~= r then g.Parent = r g.Adornee = r end
+				end
+			elseif distGuis[p] then
+				pcall(function() distGuis[p]:Destroy() end)
+				distGuis[p] = nil
+			end
+		end
+	end))
+end
+
+local function destroyChams(c)
+	if not c then return end
+	for _, part in ipairs(c:GetChildren()) do
+		if part:IsA("BasePart") then
+			local a = part:FindFirstChild("Chams")
+			local b = part:FindFirstChild("Glow")
+			if a then a:Destroy() end
+			if b then b:Destroy() end
+		end
+	end
+end
+
+local function applyChams(c)
+	if not c then return end
+	for _, part in ipairs(c:GetChildren()) do
+		if part:IsA("BasePart") and part.Transparency < 1 then
+			if not part:FindFirstChild("Chams") then
+				local ch = Instance.new("BoxHandleAdornment")
+				ch.Name = "Chams"
+				ch.AlwaysOnTop = true
+				ch.ZIndex = 4
+				ch.Adornee = part
+				ch.Transparency = 0.1
+				ch.Size = part.Size + Vector3.new(0.02, 0.02, 0.02)
+				ch.Color3 = S.espChamsColor
+				ch.Parent = part
+				local glow = Instance.new("BoxHandleAdornment")
+				glow.Name = "Glow"
+				glow.AlwaysOnTop = false
+				glow.ZIndex = 3
+				glow.Adornee = part
+				glow.Size = ch.Size + Vector3.new(0.13, 0.13, 0.13)
+				glow.Color3 = S.espChamsColor
+				glow.Parent = part
+			else
+				part.Chams.Color3 = S.espChamsColor
+				local g = part:FindFirstChild("Glow")
+				if g then g.Color3 = S.espChamsColor end
+			end
+		end
+	end
+end
+
+local function setChamsESP(on)
+	S.toggles.espChams = on == true
+	dropConn("espChams")
+	if not on then
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p.Character then destroyChams(p.Character) end
+		end
+		return
+	end
+	addConn("espChams", RunService.Heartbeat:Connect(function()
+		if not S.toggles.espChams then return end
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p ~= LP and p.Character and p.Character:FindFirstChild("Humanoid")
+				and p.Character.Humanoid.Health > 0 then
+				applyChams(p.Character)
+			end
+		end
+	end))
+end
+
+local function setESP(on)
+	setNameESP(on)
+	setBoxESP(on)
+	setDistanceESP(on)
+	setChamsESP(on)
+	S.toggles.esp = on == true
 end
 
 local function setFullbright(on)
@@ -1215,7 +1435,7 @@ verL.Font = Enum.Font.GothamMedium
 verL.TextSize = 9
 verL.TextColor3 = C.accent2
 verL.TextXAlignment = Enum.TextXAlignment.Left
-verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.2.0" or "CALI  ·  HUB  ·  v1.2.0"
+verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.3.0" or "CALI  ·  HUB  ·  v1.3.0"
 verL.ZIndex = 7
 verL.Parent = header
 
@@ -1362,7 +1582,7 @@ footR.Parent = footer
 task.spawn(function()
 	while footer.Parent do
 		local tag = isVoiceServer() and "VC" or "main"
-		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.2.0"
+		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.3.0"
 		task.wait(2)
 	end
 end)
@@ -1637,6 +1857,49 @@ local function makeInput(parent, placeholder, cb)
 	return box
 end
 
+local function makeColorRow(parent, title, get, set)
+	local row = Instance.new("Frame")
+	row.LayoutOrder = n()
+	row.Size = UDim2.new(1, -6, 0, 34)
+	row.BackgroundColor3 = C.card
+	row.BorderSizePixel = 0
+	row.Parent = parent
+	corner(row, 10)
+	stroke(row, C.strokeSoft, 1, 0.58)
+	local lbl = Instance.new("TextLabel")
+	lbl.BackgroundTransparency = 1
+	lbl.Size = UDim2.new(0.4, 0, 1, 0)
+	lbl.Position = UDim2.fromOffset(12, 0)
+	lbl.Font = Enum.Font.GothamMedium
+	lbl.TextSize = 11
+	lbl.TextColor3 = C.text
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.Text = title
+	lbl.Parent = row
+	local cols = {
+		Color3.new(1, 1, 1),
+		C.accent,
+		Color3.fromRGB(255, 70, 80),
+		Color3.fromRGB(80, 255, 130),
+		Color3.fromRGB(80, 170, 255),
+		Color3.fromRGB(255, 220, 70),
+	}
+	for i, col in ipairs(cols) do
+		local b = Instance.new("TextButton")
+		b.Size = UDim2.fromOffset(18, 18)
+		b.Position = UDim2.new(1, -10 - (#cols - i + 1) * 22, 0.5, -9)
+		b.BackgroundColor3 = col
+		b.Text = ""
+		b.AutoButtonColor = false
+		b.Parent = row
+		corner(b, 5)
+		stroke(b, Color3.new(1, 1, 1), 1, 0.65)
+		b.MouseButton1Click:Connect(function()
+			set(col)
+		end)
+	end
+end
+
 local TAB_DEFS = {
 	{ id = "home", icon = "HO", label = "Home" },
 	{ id = "combat", icon = "CB", label = "Combat" },
@@ -1849,8 +2112,8 @@ makeToggle(home, {
 	callback = function(on) S.toggles.silentAim = on if on then installSilentAim() end end,
 })
 makeToggle(home, {
-	id = "esp", title = "ESP + wallet spy",
-	tip = "Name, HP, cash, distance.",
+	id = "esp", title = "All Express ESP",
+	tip = "Name + box + distance + chams.",
 	callback = setESP,
 })
 
@@ -1972,10 +2235,59 @@ makeToggle(move, { id = "noclip", title = "Noclip", callback = setNoclip })
 makeToggle(move, { id = "infJump", title = "Infinite Jump", callback = setInfJump })
 makeToggle(move, { id = "ctrlTp", title = "Ctrl + Click TP", callback = function(on) S.toggles.ctrlTp = on end })
 
--- VISUALS
-section(vis, "ESP")
-makeToggle(vis, { id = "esp", title = "Player ESP (name / hp / cash)", callback = setESP })
+-- VISUALS (Express Hub layout)
+section(vis, "NAME ESP")
+makeToggle(vis, { id = "espName", title = "Name Esp", callback = setNameESP })
+makeColorRow(vis, "Name Color", function() return S.espNameColor end, function(c) S.espNameColor = c end)
+section(vis, "BOX ESP")
+makeToggle(vis, { id = "espBox", title = "Box Esp", callback = setBoxESP })
+makeColorRow(vis, "Box Color", function() return S.espBoxColor end, function(c) S.espBoxColor = c end)
+section(vis, "DISTANCE ESP")
+makeToggle(vis, { id = "espDist", title = "Distance Esp", callback = setDistanceESP })
+makeColorRow(vis, "Distance Color", function() return S.espDistColor end, function(c) S.espDistColor = c end)
+section(vis, "CHAMS ESP")
+makeToggle(vis, { id = "espChams", title = "Chams Esp", callback = setChamsESP })
+makeColorRow(vis, "Chams Color", function() return S.espChamsColor end, function(c)
+	S.espChamsColor = c
+	if S.toggles.espChams then
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p ~= LP and p.Character then applyChams(p.Character) end
+		end
+	end
+end)
+section(vis, "WORLD")
 makeToggle(vis, { id = "fullbright", title = "Fullbright", callback = setFullbright })
+makeSlider(vis, {
+	title = "FOV", min = 70, max = 120,
+	get = function() return S.camFov end,
+	set = function(v)
+		S.camFov = v
+		local cam = Workspace.CurrentCamera
+		if cam then cam.FieldOfView = v end
+	end,
+})
+makeToggle(vis, {
+	id = "alwaysDay", title = "Always Day",
+	callback = function(on)
+		S.toggles.alwaysDay = on
+		dropConn("day")
+		if not on then return end
+		addConn("day", RunService.Heartbeat:Connect(function()
+			if S.toggles.alwaysDay then Lighting:SetMinutesAfterMidnight(720) end
+		end))
+	end,
+})
+makeToggle(vis, {
+	id = "alwaysNight", title = "Always Night",
+	callback = function(on)
+		S.toggles.alwaysNight = on
+		dropConn("night")
+		if not on then return end
+		addConn("night", RunService.Heartbeat:Connect(function()
+			if S.toggles.alwaysNight then Lighting:SetMinutesAfterMidnight(0) end
+		end))
+	end,
+})
 
 -- TPS
 section(tps, "CALI MAP")
@@ -2084,6 +2396,10 @@ makeButton(misc, {
 		setInfJump(false)
 		setSpeedLoop(false)
 		setESP(false)
+		setNameESP(false)
+		setBoxESP(false)
+		setDistanceESP(false)
+		setChamsESP(false)
 		setFullbright(false)
 		setInstantPrompt(false)
 		setAntiAfk(false)

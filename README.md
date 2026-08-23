@@ -6,7 +6,7 @@
 loadstring(game:HttpGet("https://raw.githubusercontent.com/fungamer1234/voidz-cali-shootout/main/VOIDZ_CALI.lua", true))()
 ```
 
-Build: `2026-08-23-1.2.0` · Key: `VOIDZHUB` (unlocks everything)
+Build: `2026-08-23-1.3.0` · Key: `VOIDZHUB` (unlocks everything)
 
 **Xeno-compatible** (also Delta / MacSploit / Solara / Fluxus / UNC). Missing exploit APIs fall back safely.
 
@@ -37,6 +37,10 @@ This is the “invincible but you can still shoot” option. It does **not** use
 | Misc | Anti-AFK, rejoin, server hop, unload |
 
 Merged from public Cali hubs (Express/_scripts autofarm list, Teeksaw TPs, YNC locations, MikeyHub/Airflow combat). The Luarmor copy of Express Hub is locked; this is a VOIDZ rebuild of those options so they actually run keyless.
+
+## Recent (1.3.0) — Express ESP + gun mods
+
+Visuals match Express Hub: Name Esp, Box Esp, Distance Esp, Chams Esp (with colors). Gun mods kill camera kick, refill ammo, and rapid-fire while you hold click.
 
 ## Recent (1.2.0) — farms actually hit Cali
 
