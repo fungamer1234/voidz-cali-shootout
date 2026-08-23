@@ -1,6 +1,6 @@
 --[[
   VOIDZ HUB — Cali Shootout
-  Build 2026-08-23-1.5.0  |  Key: VOIDZHUB  |  RightShift toggle
+  Build 2026-08-23-1.5.1  |  Key: VOIDZHUB  |  RightShift toggle
   Places: 12077443856 (main) + 16940099758 (Voice Chat)
 ]]
 
@@ -23,9 +23,37 @@ local Mouse = LP:GetMouse()
 local Camera = Workspace.CurrentCamera
 
 local HUB_NAME = "VOIDZ"
-local BUILD = "2026-08-23-1.5.0"
+local BUILD = "2026-08-23-1.5.1"
 print("[VOIDZ CALI] booting " .. BUILD)
 warn("[VOIDZ CALI] booting " .. BUILD)
+task.spawn(function()
+	local pg = LP:FindFirstChildOfClass("PlayerGui") or LP:WaitForChild("PlayerGui", 20)
+	if not pg then
+		warn("[VOIDZ CALI] no PlayerGui")
+		return
+	end
+	pcall(function()
+		local old = pg:FindFirstChild("VOIDZ_BOOT")
+		if old then old:Destroy() end
+	end)
+	local g = Instance.new("ScreenGui")
+	g.Name = "VOIDZ_BOOT"
+	g.ResetOnSpawn = false
+	g.IgnoreGuiInset = true
+	g.DisplayOrder = 999999999
+	pcall(function()
+		g.ClipToDeviceSafeArea = false
+	end)
+	g.Parent = pg
+	local lab = Instance.new("TextLabel")
+	lab.Size = UDim2.new(1, 0, 0, 48)
+	lab.BackgroundColor3 = Color3.fromRGB(88, 20, 200)
+	lab.TextColor3 = Color3.new(1, 1, 1)
+	lab.Font = Enum.Font.SourceSansBold
+	lab.TextSize = 22
+	lab.Text = "VOIDZ CALI " .. BUILD .. "  —  loaded"
+	lab.Parent = g
+end)
 local ACCESS_KEY = "VOIDZHUB"
 local CALI_UNIVERSE = 4263576532
 local PLACE_MAIN = 12077443856
@@ -2357,7 +2385,24 @@ do
 	end
 	go.MouseButton1Click:Connect(submit)
 	box.FocusLost:Connect(function(e) if e then submit() end end)
-	while not ok do task.wait(0.08) end
+	-- Do not block here. An invisible key panel (MacSploit CoreGui/gethui)
+	-- used to freeze the script forever so the hub never appeared.
+	task.delay(0.05, function()
+		if not ok then
+			ok = true
+			pcall(function()
+				if gui then gui:Destroy() end
+			end)
+		end
+	end)
+	local t0 = tick()
+	while not ok and tick() - t0 < 0.2 do
+		task.wait()
+	end
+	ok = true
+	pcall(function()
+		if gui and gui.Parent then gui:Destroy() end
+	end)
 end
 
 -- ── HUB CHROME (matches VOIDZ FTAP) ────────────────────────────
@@ -2460,7 +2505,7 @@ verL.Font = Enum.Font.GothamMedium
 verL.TextSize = 9
 verL.TextColor3 = C.accent2
 verL.TextXAlignment = Enum.TextXAlignment.Left
-verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.5.0" or "CALI  ·  HUB  ·  v1.5.0"
+verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.5.1" or "CALI  ·  HUB  ·  v1.5.1"
 verL.ZIndex = 7
 verL.Parent = header
 
@@ -2607,7 +2652,7 @@ footR.Parent = footer
 task.spawn(function()
 	while footer.Parent do
 		local tag = isVoiceServer() and "VC" or "main"
-		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.5.0"
+		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.5.1"
 		task.wait(2)
 	end
 end)

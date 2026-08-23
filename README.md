@@ -3,10 +3,10 @@
 ## Loadstring (always at top)
 
 ```lua
-loadstring(game:HttpGet("https://cdn.jsdelivr.net/gh/fungamer1234/voidz-cali-shootout@main/VOIDZ_CALI.lua"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/fungamer1234/voidz-cali-shootout/main/VOIDZ_LOAD.lua"))()
 ```
 
-Build: `2026-08-23-1.5.0` · Key: `VOIDZHUB` (unlocks everything)
+Build: `2026-08-23-1.5.1` · Key: `VOIDZHUB` (unlocks everything)
 
 MacSploit: UI parents to **PlayerGui**. Do **not** pass `true` as a second argument to `HttpGet`.
 
@@ -40,6 +40,10 @@ Combat God keeps your **server position** in a green safe zone (spawn shield) wh
 | Misc | Anti-AFK, rejoin, server hop, unload |
 
 Merged from public Cali hubs (Express/_scripts autofarm list, Teeksaw TPs, YNC locations, MikeyHub/Airflow combat). The Luarmor copy of Express Hub is locked; this is a VOIDZ rebuild of those options so they actually run keyless.
+
+## Recent (1.5.1) — loader + no freeze on key
+
+Use `VOIDZ_LOAD.lua` (purple banner first). Key panel no longer blocks forever if MacSploit hides it.
 
 ## Recent (1.5.0) — MacSploit UI
 
