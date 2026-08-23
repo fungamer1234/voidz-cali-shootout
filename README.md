@@ -6,7 +6,7 @@
 loadstring(game:HttpGet("https://raw.githubusercontent.com/fungamer1234/voidz-cali-shootout/main/VOIDZ_LOAD.lua"))()
 ```
 
-Build: `2026-08-23-1.5.2` · Key: `VOIDZHUB` (unlocks everything)
+Build: `2026-08-23-1.5.3` · Key: `VOIDZHUB` (unlocks everything)
 
 MacSploit: UI parents to **PlayerGui**. Do **not** pass `true` as a second argument to `HttpGet`.
 
@@ -40,6 +40,10 @@ Combat God keeps your **server position** in a green safe zone (spawn shield) wh
 | Misc | Anti-AFK, rejoin, server hop, unload |
 
 Merged from public Cali hubs (Express/_scripts autofarm list, Teeksaw TPs, YNC locations, MikeyHub/Airflow combat). The Luarmor copy of Express Hub is locked; this is a VOIDZ rebuild of those options so they actually run keyless.
+
+## Recent (1.5.3) — 200 local register limit
+
+MacSploit compile failed with `Out of local registers (200)`. Hub UI is built inside `buildHub()` so the main chunk stays under the limit.
 
 ## Recent (1.5.2) — MacSploit parse
 

@@ -1,6 +1,6 @@
 --[[
   VOIDZ HUB — Cali Shootout
-  Build 2026-08-23-1.5.2  |  Key: VOIDZHUB  |  RightShift toggle
+  Build 2026-08-23-1.5.3  |  Key: VOIDZHUB  |  RightShift toggle
   Places: 12077443856 (main) + 16940099758 (Voice Chat)
 ]]
 
@@ -23,7 +23,7 @@ local Mouse = LP:GetMouse()
 local Camera = Workspace.CurrentCamera
 
 local HUB_NAME = "VOIDZ"
-local BUILD = "2026-08-23-1.5.2"
+local BUILD = "2026-08-23-1.5.3"
 print("[VOIDZ CALI] booting " .. BUILD)
 warn("[VOIDZ CALI] booting " .. BUILD)
 task.spawn(function()
@@ -2269,6 +2269,7 @@ task.spawn(function()
 end)
 
 
+local function buildHub()
 -- ── KEY GATE (FTAP-style void panel) ───────────────────────────
 do
 	local gui = Instance.new("ScreenGui")
@@ -2505,7 +2506,7 @@ verL.Font = Enum.Font.GothamMedium
 verL.TextSize = 9
 verL.TextColor3 = C.accent2
 verL.TextXAlignment = Enum.TextXAlignment.Left
-verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.5.2" or "CALI  ·  HUB  ·  v1.5.2"
+verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.5.3" or "CALI  ·  HUB  ·  v1.5.3"
 verL.ZIndex = 7
 verL.Parent = header
 
@@ -2652,7 +2653,7 @@ footR.Parent = footer
 task.spawn(function()
 	while footer.Parent do
 		local tag = isVoiceServer() and "VC" or "main"
-		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.5.2"
+		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.5.3"
 		task.wait(2)
 	end
 end)
@@ -3612,3 +3613,6 @@ end)
 
 notify(HUB_NAME, "Cali " .. (isVoiceServer() and "VC" or "main") .. "  ·  " .. BUILD, 3)
 print("[VOIDZ CALI] " .. BUILD .. "  -- hi im voidz")
+
+end
+buildHub()
