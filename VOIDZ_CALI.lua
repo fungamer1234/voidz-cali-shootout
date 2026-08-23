@@ -1,6 +1,6 @@
 --[[
   VOIDZ HUB — Cali Shootout
-  Build 2026-08-23-1.4.1  |  Key: VOIDZHUB  |  RightShift toggle
+  Build 2026-08-23-1.4.2  |  Key: VOIDZHUB  |  RightShift toggle
   Places: 12077443856 (main) + 16940099758 (Voice Chat)
 ]]
 
@@ -22,7 +22,7 @@ local Mouse = LP:GetMouse()
 local Camera = Workspace.CurrentCamera
 
 local HUB_NAME = "VOIDZ"
-local BUILD = "2026-08-23-1.4.1"
+local BUILD = "2026-08-23-1.4.2"
 local ACCESS_KEY = "VOIDZHUB"
 local CALI_UNIVERSE = 4263576532
 local PLACE_MAIN = 12077443856
@@ -296,10 +296,9 @@ local function cashOf(p)
 	return n
 end
 
--- ── Combat God (FE humanoid clone + health/armor refill) ───────
--- Cali damage is server-sided. Setting Humanoid.Health locally does nothing.
--- Clone-god (Infinite Yield style): server kills the old Humanoid, you keep
--- a new one named "Humanoid" so tools still shoot.
+-- ── Combat God ─────────────────────────────────────────────────
+-- Do NOT hook __namecall / Instance methods or parent ForceFields to
+-- Character — Cali's AC kicks (267) for "namecall / instance detector".
 local function refillVitals(c, h)
 	if h then
 		pcall(function()
@@ -334,18 +333,6 @@ local function refillVitals(c, h)
 			if v == true then LP:SetAttribute(a, false) end
 		end
 	end)
-end
-
-local function ensureForceField(c)
-	if not c then return end
-	local ff = c:FindFirstChildOfClass("ForceField")
-	if not ff then
-		ff = Instance.new("ForceField")
-		ff.Name = "VOIDZ_FF"
-		ff.Visible = false
-		ff.Parent = c
-	end
-	ff.Visible = false
 end
 
 -- Ghost gun: keep the Tool equipped (so Activate still fires) but the
@@ -414,51 +401,9 @@ end
 local function applyCombatGod(h, c)
 	c = c or char()
 	h = h or (c and c:FindFirstChildOfClass("Humanoid"))
-	ensureForceField(c)
 	refillVitals(c, h)
 	keepToolEquipped(c)
 	ghostGunVisuals(c)
-	if h then
-		pcall(function()
-			h.TakeDamage = function() end
-		end)
-	end
-end
-
-local godHooksOn = false
-local function installGodHooks()
-	if godHooksOn then return end
-	godHooksOn = true
-	pcall(function()
-		local hmm = hookmetamethod or (syn and syn.hook_metamethod)
-		if type(hmm) ~= "function" then return end
-		local ncm = getnamecallmethod or (debug and debug.getinfo)
-		local old
-		old = hmm(game, "__namecall", function(self, ...)
-			local method = ""
-			pcall(function()
-				method = (getnamecallmethod and getnamecallmethod()) or ""
-			end)
-			if S.toggles.combatGod and (method == "TakeDamage" or method == "takeDamage") then
-				return
-			end
-			return old(self, ...)
-		end)
-	end)
-	pcall(function()
-		local hmm = hookmetamethod or (syn and syn.hook_metamethod)
-		if type(hmm) ~= "function" then return end
-		local old
-		old = hmm(game, "__newindex", function(self, k, v)
-			if S.toggles.combatGod and typeof(self) == "Instance" and self:IsA("Humanoid")
-				and self:IsDescendantOf(LP.Character or self) then
-				if k == "Health" and type(v) == "number" and v < (self.MaxHealth or 100) then
-					v = self.MaxHealth or 100
-				end
-			end
-			return old(self, k, v)
-		end)
-	end)
 end
 
 local function setCombatGod(on)
@@ -468,24 +413,11 @@ local function setCombatGod(on)
 	dropConn("combatGodDied")
 	if not on then
 		restoreGhostGuns()
-		local c = char()
-		if c then
-			local ff = c:FindFirstChild("VOIDZ_FF")
-			if ff then pcall(function() ff:Destroy() end) end
-		end
 		notify(HUB_NAME, "Combat God OFF", 1.2)
 		return
 	end
-	notify(HUB_NAME, "Combat God ON — ForceField + health lock + ghost gun", 2)
-	installGodHooks()
+	notify(HUB_NAME, "Combat God ON — no AC hooks  ·  snap-back + ghost gun", 2)
 	applyCombatGod(hum(), char())
-	pcall(function()
-		local hf = hookfunction
-		local h = hum()
-		if type(hf) == "function" and h and h.TakeDamage then
-			hf(h.TakeDamage, function() end)
-		end
-	end)
 	local h = hum()
 	if h then
 		addConn("combatGodDied", h.Died:Connect(function()
@@ -508,19 +440,15 @@ local function setCombatGod(on)
 	end
 	addConn("combatGodHB", RunService.Heartbeat:Connect(function()
 		if not S.toggles.combatGod then return end
-		local c, h = char(), hum()
 		if hrp() then S.godCF = hrp().CFrame end
-		applyCombatGod(h, c)
+		applyCombatGod(hum(), char())
 	end))
 	addConn("combatGodStep", RunService.Stepped:Connect(function()
 		if not S.toggles.combatGod then return end
-		local c = char()
-		if not c then return end
-		ensureForceField(c)
-		keepToolEquipped(c)
-		ghostGunVisuals(c)
-		local h = hum()
-		if h and h.Health < h.MaxHealth then h.Health = h.MaxHealth end
+		keepToolEquipped(char())
+		ghostGunVisuals(char())
+		local hh = hum()
+		if hh and hh.Health < hh.MaxHealth then hh.Health = hh.MaxHealth end
 	end))
 end
 
@@ -709,9 +637,11 @@ local function installSilentAim()
 	local hmm = hookmetamethod or (syn and syn.hook_metamethod)
 	if type(hmm) == "function" then
 		pcall(function()
+			local wrap = (type(newcclosure) == "function" and newcclosure) or function(f) return f end
+			local callerOk = type(checkcaller) == "function"
 			local old
-			old = hmm(game, "__index", function(self, k)
-				if S.toggles.silentAim and self == Mouse then
+			old = hmm(game, "__index", wrap(function(self, k)
+				if S.toggles.silentAim and self == Mouse and (not callerOk or not checkcaller()) then
 					local t = closestInFov()
 					local part = t and t.Character and (t.Character:FindFirstChild("Head") or t.Character:FindFirstChild("HumanoidRootPart"))
 					if part then
@@ -720,7 +650,7 @@ local function installSilentAim()
 					end
 				end
 				return old(self, k)
-			end)
+			end))
 		end)
 	end
 end
@@ -1170,11 +1100,23 @@ local function farmCheckTick()
 	end
 end
 
--- ── ESP (Express Hub: name / box / distance / health / chams) ──
+-- ── ESP (never parent extras to Character — Cali instance AC) ──
 local nameDrawings = {}
 local boxAdorns = {}
 local distGuis = {}
 local hpGuis = {}
+local chamBags = {}
+
+local function worldEspHolder()
+	local parent = pickGuiParent()
+	local f = parent:FindFirstChild("WorldFx")
+	if not f then
+		f = Instance.new("Folder")
+		f.Name = "WorldFx"
+		f.Parent = parent
+	end
+	return f
+end
 
 local hasDrawing = false
 pcall(function()
@@ -1222,10 +1164,11 @@ local function setNameESP(on)
 					else
 						if not d or not d.Parent then
 							d = Instance.new("BillboardGui")
-							d.Name = "VOIDZ_NameESP"
+							d.Name = "NameTag"
 							d.Size = UDim2.fromOffset(120, 18)
 							d.AlwaysOnTop = true
 							d.StudsOffset = Vector3.new(0, 2.4, 0)
+							d.Adornee = part
 							local tl = Instance.new("TextLabel")
 							tl.BackgroundTransparency = 1
 							tl.Size = UDim2.fromScale(1, 1)
@@ -1233,7 +1176,7 @@ local function setNameESP(on)
 							tl.TextSize = 12
 							tl.TextStrokeTransparency = 0.4
 							tl.Parent = d
-							d.Parent = part
+							d.Parent = worldEspHolder()
 							nameDrawings[p] = d
 						end
 						local tl = d:FindFirstChildOfClass("TextLabel")
@@ -1241,7 +1184,7 @@ local function setNameESP(on)
 							tl.Text = p.Name
 							tl.TextColor3 = S.espNameColor
 						end
-						if d.Parent ~= part then d.Parent = part end
+						d.Adornee = part
 					end
 				end
 			elseif nameDrawings[p] then
@@ -1274,12 +1217,12 @@ local function setBoxESP(on)
 				local box = boxAdorns[p]
 				if not box or not box.Parent then
 					box = Instance.new("BoxHandleAdornment")
-					box.Name = "VOIDZ_BoxESP"
+					box.Name = "Box"
 					box.Size = Vector3.new(2, 5, 1)
 					box.AlwaysOnTop = true
 					box.ZIndex = 2
 					box.Transparency = 0.5
-					box.Parent = p.Character
+					box.Parent = worldEspHolder()
 					boxAdorns[p] = box
 				end
 				box.Adornee = p.Character.HumanoidRootPart
@@ -1312,12 +1255,12 @@ local function setDistanceESP(on)
 					local g = distGuis[p]
 					if not g or not g.Parent then
 						g = Instance.new("BillboardGui")
-						g.Name = "VOIDZ_DistESP"
+						g.Name = "DistTag"
 						g.Size = UDim2.fromOffset(70, 28)
 						g.AlwaysOnTop = true
 						g.StudsOffset = Vector3.new(3, 0, 0)
 						g.Adornee = r
-						g.Parent = r
+						g.Parent = worldEspHolder()
 						local tl = Instance.new("TextLabel")
 						tl.BackgroundTransparency = 1
 						tl.Size = UDim2.fromScale(1, 1)
@@ -1332,7 +1275,7 @@ local function setDistanceESP(on)
 						tl.TextColor3 = S.espDistColor
 						tl.Text = string.format("Distance: %d", math.floor((r.Position - cam.CFrame.Position).Magnitude))
 					end
-					if g.Parent ~= r then g.Parent = r g.Adornee = r end
+					g.Adornee = r
 				end
 			elseif distGuis[p] then
 				pcall(function() distGuis[p]:Destroy() end)
@@ -1364,12 +1307,12 @@ local function setHealthESP(on)
 					if not g or not g.Parent or not g:FindFirstChild("FillTrack") then
 						if g then pcall(function() g:Destroy() end) end
 						g = Instance.new("BillboardGui")
-						g.Name = "VOIDZ_HpESP"
+						g.Name = "HpTag"
 						g.Size = UDim2.fromOffset(78, 20)
 						g.AlwaysOnTop = true
 						g.StudsOffset = Vector3.new(0, 3.15, 0)
 						g.Adornee = head
-						g.Parent = head
+						g.Parent = worldEspHolder()
 						local tl = Instance.new("TextLabel")
 						tl.Name = "Txt"
 						tl.BackgroundTransparency = 1
@@ -1411,10 +1354,7 @@ local function setHealthESP(on)
 						fill.Size = UDim2.fromScale(frac, 1)
 						fill.BackgroundColor3 = col
 					end
-					if g.Parent ~= head then
-						g.Parent = head
-						g.Adornee = head
-					end
+					g.Adornee = head
 				end
 			elseif hpGuis[p] then
 				pcall(function() hpGuis[p]:Destroy() end)
@@ -1424,7 +1364,15 @@ local function setHealthESP(on)
 	end))
 end
 
-local function destroyChams(c)
+local function destroyChamsFor(p)
+	local bag = chamBags[p]
+	if bag then
+		for _, a in ipairs(bag) do
+			pcall(function() a:Destroy() end)
+		end
+		chamBags[p] = nil
+	end
+	local c = p and p.Character
 	if not c then return end
 	for _, part in ipairs(c:GetChildren()) do
 		if part:IsA("BasePart") then
@@ -1438,33 +1386,43 @@ end
 
 local function applyChams(c)
 	if not c then return end
+	local p = Players:GetPlayerFromCharacter(c)
+	if not p then return end
+	local bag = chamBags[p]
+	local live = bag and bag[1] and bag[1].Parent and bag[1].Adornee and bag[1].Adornee.Parent == c
+	if live then
+		for _, a in ipairs(bag) do
+			pcall(function() a.Color3 = S.espChamsColor end)
+		end
+		return
+	end
+	destroyChamsFor(p)
+	bag = {}
+	local holder = worldEspHolder()
 	for _, part in ipairs(c:GetChildren()) do
 		if part:IsA("BasePart") and part.Transparency < 1 then
-			if not part:FindFirstChild("Chams") then
-				local ch = Instance.new("BoxHandleAdornment")
-				ch.Name = "Chams"
-				ch.AlwaysOnTop = true
-				ch.ZIndex = 4
-				ch.Adornee = part
-				ch.Transparency = 0.1
-				ch.Size = part.Size + Vector3.new(0.02, 0.02, 0.02)
-				ch.Color3 = S.espChamsColor
-				ch.Parent = part
-				local glow = Instance.new("BoxHandleAdornment")
-				glow.Name = "Glow"
-				glow.AlwaysOnTop = false
-				glow.ZIndex = 3
-				glow.Adornee = part
-				glow.Size = ch.Size + Vector3.new(0.13, 0.13, 0.13)
-				glow.Color3 = S.espChamsColor
-				glow.Parent = part
-			else
-				part.Chams.Color3 = S.espChamsColor
-				local g = part:FindFirstChild("Glow")
-				if g then g.Color3 = S.espChamsColor end
-			end
+			local ch = Instance.new("BoxHandleAdornment")
+			ch.Name = "Ch"
+			ch.AlwaysOnTop = true
+			ch.ZIndex = 4
+			ch.Adornee = part
+			ch.Transparency = 0.1
+			ch.Size = part.Size + Vector3.new(0.02, 0.02, 0.02)
+			ch.Color3 = S.espChamsColor
+			ch.Parent = holder
+			local glow = Instance.new("BoxHandleAdornment")
+			glow.Name = "Gl"
+			glow.AlwaysOnTop = false
+			glow.ZIndex = 3
+			glow.Adornee = part
+			glow.Size = ch.Size + Vector3.new(0.13, 0.13, 0.13)
+			glow.Color3 = S.espChamsColor
+			glow.Parent = holder
+			bag[#bag + 1] = ch
+			bag[#bag + 1] = glow
 		end
 	end
+	chamBags[p] = bag
 end
 
 local function setChamsESP(on)
@@ -1472,7 +1430,7 @@ local function setChamsESP(on)
 	dropConn("espChams")
 	if not on then
 		for _, p in ipairs(Players:GetPlayers()) do
-			if p.Character then destroyChams(p.Character) end
+			destroyChamsFor(p)
 		end
 		return
 	end
@@ -1482,6 +1440,8 @@ local function setChamsESP(on)
 			if p ~= LP and p.Character and p.Character:FindFirstChild("Humanoid")
 				and p.Character.Humanoid.Health > 0 then
 				applyChams(p.Character)
+			else
+				destroyChamsFor(p)
 			end
 		end
 	end))
@@ -1775,7 +1735,7 @@ verL.Font = Enum.Font.GothamMedium
 verL.TextSize = 9
 verL.TextColor3 = C.accent2
 verL.TextXAlignment = Enum.TextXAlignment.Left
-verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.4.1" or "CALI  ·  HUB  ·  v1.4.1"
+verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.4.2" or "CALI  ·  HUB  ·  v1.4.2"
 verL.ZIndex = 7
 verL.Parent = header
 
@@ -1922,7 +1882,7 @@ footR.Parent = footer
 task.spawn(function()
 	while footer.Parent do
 		local tag = isVoiceServer() and "VC" or "main"
-		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.4.1"
+		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.4.2"
 		task.wait(2)
 	end
 end)
@@ -2444,8 +2404,8 @@ end
 section(home, "QUICK")
 makeToggle(home, {
 	id = "combatGod", title = "Combat God",
-	desc = "ForceField + health lock + ghost gun",
-	tip = "Invisible ForceField blocks TakeDamage. If you still drop, you snap back on respawn.",
+	desc = "Snap-back + ghost gun  ·  no AC hooks",
+	tip = "No namecall / ForceField — those got 267 kicked. If you drop, you snap back on respawn.",
 	callback = setCombatGod,
 })
 makeToggle(home, {
@@ -2463,7 +2423,7 @@ makeToggle(home, {
 section(combat, "SURVIVE")
 makeToggle(combat, {
 	id = "combatGod", title = "Combat God",
-	desc = "ForceField + health lock + ghost gun",
+	desc = "Snap-back + ghost gun  ·  no AC hooks",
 	callback = setCombatGod,
 })
 makeToggle(combat, {

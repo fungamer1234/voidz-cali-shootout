@@ -6,7 +6,7 @@
 loadstring(game:HttpGet("https://raw.githubusercontent.com/fungamer1234/voidz-cali-shootout/main/VOIDZ_CALI.lua", true))()
 ```
 
-Build: `2026-08-23-1.4.1` · Key: `VOIDZHUB` (unlocks everything)
+Build: `2026-08-23-1.4.2` · Key: `VOIDZHUB` (unlocks everything)
 
 **Xeno-compatible** (also Delta / MacSploit / Solara / Fluxus / UNC). Missing exploit APIs fall back safely.
 
@@ -20,7 +20,7 @@ GitHub: https://github.com/fungamer1234/voidz-cali-shootout
 
 ## Combat God
 
-This is the “invincible but you can still shoot” option. It does **not** use a ForceField or PlatformStand (those cancel guns). It locks health, blocks Dead/Ragdoll/KO flags, and leaves your tools equipped.
+Cali’s anti-cheat kicks (error **267**) if you hook `__namecall` or parent extra instances (ForceField, ESP) onto your character. Combat God no longer does any of that. It keeps the ghost gun, health lock, and snap-back on respawn — it will **not** make you actually immortal.
 
 ## Tabs
 
@@ -37,6 +37,10 @@ This is the “invincible but you can still shoot” option. It does **not** use
 | Misc | Anti-AFK, rejoin, server hop, unload |
 
 Merged from public Cali hubs (Express/_scripts autofarm list, Teeksaw TPs, YNC locations, MikeyHub/Airflow combat). The Luarmor copy of Express Hub is locked; this is a VOIDZ rebuild of those options so they actually run keyless.
+
+## Recent (1.4.2) — anti-kick
+
+Removed `__namecall` / `TakeDamage` hooks and ForceFields on your character (Cali 267: “namecall instance detector”). ESP now lives in a hidden GUI folder with `Adornee`, not parented to Head/HRP.
 
 ## Recent (1.4.1) — Health Esp
 
