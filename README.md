@@ -6,13 +6,15 @@
 loadstring(game:HttpGet("https://raw.githubusercontent.com/fungamer1234/voidz-cali-shootout/main/VOIDZ_CALI.lua", true))()
 ```
 
-Build: `2026-08-23-1.0.0` · Key: `VOIDZHUB` (unlocks everything)
+Build: `2026-08-23-1.1.0` · Key: `VOIDZHUB` (unlocks everything)
 
 **Xeno-compatible** (also Delta / MacSploit / Solara / Fluxus / UNC). Missing exploit APIs fall back safely.
 
-1. Join **Cali Shootout** (PlaceId `12077443856`).
+1. Join **Cali Shootout** — main (`12077443856`) **or Voice Chat** (`16940099758`).
 2. Execute the loadstring.
 3. Key **`VOIDZHUB`**. RightShift show/hide.
+
+The hub follows you onto the VC place (`queue_on_teleport`). TPs tab can hop main ↔ VC.
 
 GitHub: https://github.com/fungamer1234/voidz-cali-shootout
 
@@ -35,6 +37,10 @@ This is the “invincible but you can still shoot” option. It does **not** use
 | Misc | Anti-AFK, rejoin, server hop, unload |
 
 Merged from public Cali hubs (Express/_scripts autofarm list, Teeksaw TPs, YNC locations, MikeyHub/Airflow combat). The Luarmor copy of Express Hub is locked; this is a VOIDZ rebuild of those options so they actually run keyless.
+
+## Recent (1.1.0) — VC + FTAP chrome
+
+Works on the Voice Chat server (place `16940099758`, same universe). UI is the VOIDZ FTAP chrome: V mark, sidebar rails, glass cards, iOS pills, tip bar.
 
 ## Recent (1.0.0)
 

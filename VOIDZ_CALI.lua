@@ -1,9 +1,7 @@
 --[[
   VOIDZ HUB — Cali Shootout
-  Build 2026-08-23-1.0.0  |  Key: VOIDZHUB  |  RightShift toggle
-
-  Feature set merged from public Cali scripts (Express/_scripts, Teeksaw, YNC, MikeyHub, Airflow):
-  combat god (invincible + still shoot), silent aim, gun mods, farms, ESP, teleports.
+  Build 2026-08-23-1.1.0  |  Key: VOIDZHUB  |  RightShift toggle
+  Places: 12077443856 (main) + 16940099758 (Voice Chat)
 ]]
 
 local Players = game:GetService("Players")
@@ -23,25 +21,35 @@ while not LP do task.wait() LP = Players.LocalPlayer end
 local Mouse = LP:GetMouse()
 local Camera = Workspace.CurrentCamera
 
-local HUB_NAME = "VOIDZ  CALI"
-local BUILD = "2026-08-23-1.0.0"
+local HUB_NAME = "VOIDZ"
+local BUILD = "2026-08-23-1.1.0"
 local ACCESS_KEY = "VOIDZHUB"
-local PLACE_ID = 12077443856
+local CALI_UNIVERSE = 4263576532
+local PLACE_MAIN = 12077443856
+local PLACE_VC = 16940099758
 
+-- Same Purple glass as VOIDZ HUB (FTAP)
 local C = {
-	bg = Color3.fromRGB(10, 8, 16),
-	bg2 = Color3.fromRGB(16, 12, 26),
-	card = Color3.fromRGB(26, 18, 40),
-	cardHov = Color3.fromRGB(36, 26, 54),
-	accent = Color3.fromRGB(150, 70, 255),
-	accent2 = Color3.fromRGB(190, 120, 255),
-	text = Color3.fromRGB(240, 236, 255),
-	muted = Color3.fromRGB(140, 125, 165),
-	border = Color3.fromRGB(55, 40, 80),
-	success = Color3.fromRGB(70, 210, 130),
-	danger = Color3.fromRGB(210, 55, 80),
-	warn = Color3.fromRGB(255, 190, 70),
+	bg = Color3.fromRGB(12, 8, 24), bg2 = Color3.fromRGB(22, 14, 42),
+	card = Color3.fromRGB(36, 26, 62), card2 = Color3.fromRGB(52, 38, 88),
+	stroke = Color3.fromRGB(168, 108, 255), strokeSoft = Color3.fromRGB(92, 68, 140),
+	accent = Color3.fromRGB(186, 132, 255), accent2 = Color3.fromRGB(230, 196, 255),
+	accentDim = Color3.fromRGB(78, 48, 132), text = Color3.fromRGB(255, 255, 255),
+	muted = Color3.fromRGB(214, 206, 236), danger = Color3.fromRGB(72, 24, 42),
+	dangerText = Color3.fromRGB(255, 168, 186), dangerStroke = Color3.fromRGB(230, 90, 130),
+	success = Color3.fromRGB(110, 240, 180), warn = Color3.fromRGB(255, 214, 120),
+	black = Color3.fromRGB(0, 0, 0), tip = Color3.fromRGB(20, 14, 36),
 }
+
+local function isCaliPlace()
+	if tonumber(game.GameId) == CALI_UNIVERSE then return true end
+	local pid = tonumber(game.PlaceId)
+	return pid == PLACE_MAIN or pid == PLACE_VC
+end
+local function isVoiceServer()
+	return tonumber(game.PlaceId) == PLACE_VC
+		or tostring(game.PlaceId) == tostring(PLACE_VC)
+end
 
 local S = {
 	toggles = {},
@@ -68,11 +76,47 @@ local function corner(i, r)
 end
 local function stroke(i, col, th, tr)
 	local s = Instance.new("UIStroke")
-	s.Color = col or C.border
+	s.Color = col or C.strokeSoft
 	s.Thickness = th or 1
-	s.Transparency = tr or 0.35
+	s.Transparency = tr ~= nil and tr or 0.35
+	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	s.Parent = i
 	return s
+end
+local function pad(i, a, b, c, d)
+	local p = Instance.new("UIPadding")
+	p.PaddingTop = UDim.new(0, a or 8)
+	p.PaddingRight = UDim.new(0, b or 8)
+	p.PaddingBottom = UDim.new(0, c or 8)
+	p.PaddingLeft = UDim.new(0, d or 8)
+	p.Parent = i
+	return p
+end
+local function mix3(a, b, t)
+	t = tonumber(t) or 0.5
+	a, b = a or Color3.new(), b or Color3.new()
+	return Color3.new(a.R + (b.R - a.R) * t, a.G + (b.G - a.G) * t, a.B + (b.B - a.B) * t)
+end
+local function glass(i)
+	local g = Instance.new("UIGradient")
+	g.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, mix3(C.accent, C.card2, 0.45)),
+		ColorSequenceKeypoint.new(0.5, C.card2),
+		ColorSequenceKeypoint.new(1, C.card),
+	})
+	g.Rotation = 22
+	g.Parent = i
+	return g
+end
+local function panelWash(i)
+	local g = Instance.new("UIGradient")
+	g.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, mix3(C.accent, C.bg2, 0.42)),
+		ColorSequenceKeypoint.new(1, C.bg2),
+	})
+	g.Rotation = 8
+	g.Parent = i
+	return g
 end
 
 local function notify(title, text, dur)
@@ -106,12 +150,28 @@ local function tp(cf)
 end
 
 local function pickGuiParent()
+	local hui
+	pcall(function()
+		if type(gethui) == "function" then hui = gethui() end
+	end)
+	if hui then return hui end
 	local ok, cg = pcall(function()
 		return game:GetService("CoreGui")
 	end)
 	if ok and cg then return cg end
 	return LP:WaitForChild("PlayerGui")
 end
+
+pcall(function()
+	local q = (type(queue_on_teleport) == "function" and queue_on_teleport)
+		or (syn and (syn.queue_on_teleport or syn.queue_on_teleport))
+	if type(q) == "function" then
+		q([[loadstring(game:HttpGet("https://raw.githubusercontent.com/fungamer1234/voidz-cali-shootout/main/VOIDZ_CALI.lua", true))()]])
+	end
+end)
+pcall(function()
+	game:GetService("VoiceChatService")
+end)
 
 local function addConn(id, conn)
 	if S.conns[id] then
@@ -723,76 +783,110 @@ local function setAntiAfk(on)
 	end)
 end
 
--- ── KEY GATE ───────────────────────────────────────────────────
+addConn("guns", RunService.Heartbeat:Connect(function()
+	if S.toggles.noRecoil or S.toggles.noSpread or S.toggles.infAmmo
+		or S.toggles.noJam or S.toggles.rapidFire or S.toggles.oneShot then
+		applyGunMods()
+	end
+end))
+
+
+-- ── KEY GATE (FTAP-style void panel) ───────────────────────────
 do
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "VOIDZ_CALI_KEY"
 	gui.IgnoreGuiInset = true
 	gui.ResetOnSpawn = false
 	gui.DisplayOrder = 200000
+	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	gui.Parent = pickGuiParent()
+	local dim = Instance.new("Frame")
+	dim.Size = UDim2.fromScale(1, 1)
+	dim.BackgroundColor3 = C.black
+	dim.BackgroundTransparency = 0.25
+	dim.BorderSizePixel = 0
+	dim.Parent = gui
 	local root = Instance.new("Frame")
 	root.AnchorPoint = Vector2.new(0.5, 0.5)
 	root.Position = UDim2.fromScale(0.5, 0.5)
-	root.Size = UDim2.fromOffset(340, 220)
+	root.Size = UDim2.fromOffset(360, 248)
 	root.BackgroundColor3 = C.bg
 	root.BorderSizePixel = 0
 	root.Parent = gui
 	corner(root, 16)
-	stroke(root, C.accent, 1.4, 0.2)
+	stroke(root, C.accent, 1.5, 0.18)
+	panelWash(root)
+	local mark = Instance.new("Frame")
+	mark.Size = UDim2.fromOffset(36, 36)
+	mark.Position = UDim2.new(0.5, -18, 0, 22)
+	mark.BackgroundColor3 = C.accent
+	mark.BorderSizePixel = 0
+	mark.Parent = root
+	corner(mark, 10)
+	stroke(mark, C.accent2, 1, 0.4)
+	local mv = Instance.new("TextLabel")
+	mv.BackgroundTransparency = 1
+	mv.Size = UDim2.fromScale(1, 1)
+	mv.Font = Enum.Font.GothamBlack
+	mv.TextSize = 16
+	mv.TextColor3 = Color3.new(1, 1, 1)
+	mv.Text = "V"
+	mv.Parent = mark
 	local t = Instance.new("TextLabel")
 	t.BackgroundTransparency = 1
-	t.Size = UDim2.new(1, 0, 0, 34)
-	t.Position = UDim2.fromOffset(0, 22)
+	t.Size = UDim2.new(1, 0, 0, 22)
+	t.Position = UDim2.fromOffset(0, 66)
 	t.Font = Enum.Font.GothamBlack
-	t.TextSize = 20
-	t.TextColor3 = C.accent2
-	t.Text = "VOIDZ  CALI"
+	t.TextSize = 18
+	t.TextColor3 = C.text
+	t.Text = "VOIDZ"
 	t.Parent = root
 	local s = Instance.new("TextLabel")
 	s.BackgroundTransparency = 1
-	s.Size = UDim2.new(1, 0, 0, 18)
-	s.Position = UDim2.fromOffset(0, 56)
-	s.Font = Enum.Font.Gotham
-	s.TextSize = 12
-	s.TextColor3 = C.muted
-	s.Text = "Cali Shootout hub  ·  enter key"
+	s.Size = UDim2.new(1, 0, 0, 16)
+	s.Position = UDim2.fromOffset(0, 90)
+	s.Font = Enum.Font.GothamMedium
+	s.TextSize = 11
+	s.TextColor3 = C.accent2
+	s.Text = isVoiceServer() and "CALI  ·  VOICE CHAT SERVER" or "CALI SHOOTOUT"
 	s.Parent = root
 	local box = Instance.new("TextBox")
-	box.Size = UDim2.fromOffset(220, 34)
-	box.Position = UDim2.new(0.5, -110, 0, 90)
+	box.Size = UDim2.fromOffset(240, 34)
+	box.Position = UDim2.new(0.5, -120, 0, 118)
 	box.BackgroundColor3 = C.card
 	box.Text = ""
-	box.PlaceholderText = "Key"
+	box.PlaceholderText = "VOIDZHUB"
 	box.PlaceholderColor3 = C.muted
 	box.Font = Enum.Font.GothamMedium
-	box.TextSize = 14
+	box.TextSize = 13
 	box.TextColor3 = C.text
 	box.ClearTextOnFocus = false
 	box.BorderSizePixel = 0
 	box.Parent = root
 	corner(box, 8)
-	stroke(box, C.border, 1, 0.3)
+	stroke(box, C.strokeSoft, 1, 0.35)
 	local err = Instance.new("TextLabel")
 	err.BackgroundTransparency = 1
-	err.Size = UDim2.new(1, 0, 0, 16)
-	err.Position = UDim2.fromOffset(0, 128)
+	err.Size = UDim2.new(1, 0, 0, 14)
+	err.Position = UDim2.fromOffset(0, 156)
 	err.Font = Enum.Font.Gotham
 	err.TextSize = 11
-	err.TextColor3 = C.danger
+	err.TextColor3 = C.dangerText
 	err.Text = ""
 	err.Parent = root
 	local go = Instance.new("TextButton")
-	go.Size = UDim2.fromOffset(220, 34)
-	go.Position = UDim2.new(0.5, -110, 0, 152)
+	go.Size = UDim2.fromOffset(240, 34)
+	go.Position = UDim2.new(0.5, -120, 0, 178)
 	go.BackgroundColor3 = C.accent
 	go.Text = "Unlock"
 	go.Font = Enum.Font.GothamBold
-	go.TextSize = 14
-	go.TextColor3 = C.text
+	go.TextSize = 13
+	go.TextColor3 = Color3.new(1, 1, 1)
+	go.AutoButtonColor = false
 	go.BorderSizePixel = 0
 	go.Parent = root
 	corner(go, 8)
+	stroke(go, C.accent2, 1, 0.45)
 	local ok = false
 	local function submit()
 		local k = tostring(box.Text or ""):gsub("%s+", "")
@@ -801,272 +895,502 @@ do
 			gui:Destroy()
 		else
 			err.Text = "Wrong key"
+			tw(box, { Position = UDim2.new(0.5, -128, 0, 118) }, 0.05)
+			task.wait(0.05)
+			tw(box, { Position = UDim2.new(0.5, -112, 0, 118) }, 0.05)
+			task.wait(0.05)
+			tw(box, { Position = UDim2.new(0.5, -120, 0, 118) }, 0.08)
 		end
 	end
 	go.MouseButton1Click:Connect(submit)
-	box.FocusLost:Connect(function(e)
-		if e then submit() end
-	end)
+	box.FocusLost:Connect(function(e) if e then submit() end end)
 	while not ok do task.wait(0.08) end
 end
 
--- ── UI ─────────────────────────────────────────────────────────
+-- ── HUB CHROME (matches VOIDZ FTAP) ────────────────────────────
 pcall(function()
 	local old = pickGuiParent():FindFirstChild("VOIDZ_CALI_HUB")
 	if old then old:Destroy() end
 end)
 
-local screen = Instance.new("ScreenGui")
-screen.Name = "VOIDZ_CALI_HUB"
-screen.ResetOnSpawn = false
-screen.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-screen.IgnoreGuiInset = true
-screen.Parent = pickGuiParent()
+local sg = Instance.new("ScreenGui")
+sg.Name = "VOIDZ_CALI_HUB"
+sg.ResetOnSpawn = false
+sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+sg.IgnoreGuiInset = true
+sg.DisplayOrder = 120000
+sg.Parent = pickGuiParent()
 
-local Main = Instance.new("Frame")
-Main.Size = UDim2.fromOffset(560, 560)
-Main.Position = UDim2.new(0.5, -280, 0.5, -280)
-Main.BackgroundColor3 = C.bg
-Main.BorderSizePixel = 0
-Main.ClipsDescendants = true
-Main.Parent = screen
-corner(Main, 14)
-stroke(Main, C.accent, 1.2, 0.25)
+local MAIN_W, MAIN_H = 720, 500
+local SIDE_W = 158
+local HEADER_H, FOOTER_H = 56, 26
 
-local glow = Instance.new("Frame")
-glow.Size = UDim2.new(1, 0, 0, 3)
-glow.BackgroundColor3 = C.accent
-glow.BorderSizePixel = 0
-glow.Parent = Main
+local root = Instance.new("Frame")
+root.Name = "Root"
+root.AnchorPoint = Vector2.new(0.5, 0.5)
+root.Position = UDim2.fromScale(0.5, 0.5)
+root.Size = UDim2.fromOffset(MAIN_W, MAIN_H)
+root.BackgroundColor3 = C.bg
+root.BorderSizePixel = 0
+root.ClipsDescendants = true
+root.Parent = sg
+corner(root, 16)
+stroke(root, C.stroke, 1.2, 0.28)
 
-local Header = Instance.new("Frame")
-Header.Size = UDim2.new(1, 0, 0, 50)
-Header.Position = UDim2.fromOffset(0, 3)
-Header.BackgroundColor3 = C.bg2
-Header.BorderSizePixel = 0
-Header.Parent = Main
-corner(Header, 14)
+local header = Instance.new("Frame")
+header.Size = UDim2.new(1, 0, 0, HEADER_H)
+header.BackgroundColor3 = C.bg2
+header.BorderSizePixel = 0
+header.ZIndex = 5
+header.Parent = root
+panelWash(header)
+local top = Instance.new("Frame")
+top.Size = UDim2.new(1, 0, 0, 2)
+top.BackgroundColor3 = Color3.new(1, 1, 1)
+top.BorderSizePixel = 0
+top.ZIndex = 6
+top.Parent = header
+local topGrad = Instance.new("UIGradient")
+topGrad.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, C.accent),
+	ColorSequenceKeypoint.new(0.5, C.accent2),
+	ColorSequenceKeypoint.new(1, C.accent),
+})
+topGrad.Parent = top
+local headerLine = Instance.new("Frame")
+headerLine.Size = UDim2.new(1, 0, 0, 1)
+headerLine.Position = UDim2.new(0, 0, 1, -1)
+headerLine.BackgroundColor3 = C.strokeSoft
+headerLine.BackgroundTransparency = 0.45
+headerLine.BorderSizePixel = 0
+headerLine.ZIndex = 6
+headerLine.Parent = header
 
-local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, -50, 0, 26)
-Title.Position = UDim2.fromOffset(14, 4)
-Title.BackgroundTransparency = 1
-Title.Text = HUB_NAME
-Title.Font = Enum.Font.GothamBlack
-Title.TextSize = 16
-Title.TextColor3 = C.accent
-Title.TextXAlignment = Enum.TextXAlignment.Left
-Title.Parent = Header
+local logoMark = Instance.new("Frame")
+logoMark.Size = UDim2.fromOffset(30, 30)
+logoMark.Position = UDim2.fromOffset(14, 13)
+logoMark.BackgroundColor3 = C.accent
+logoMark.BorderSizePixel = 0
+logoMark.ZIndex = 7
+logoMark.Parent = header
+corner(logoMark, 9)
+stroke(logoMark, C.accent2, 1, 0.45)
+local logoMarkTx = Instance.new("TextLabel")
+logoMarkTx.BackgroundTransparency = 1
+logoMarkTx.Size = UDim2.fromScale(1, 1)
+logoMarkTx.Font = Enum.Font.GothamBlack
+logoMarkTx.TextSize = 15
+logoMarkTx.TextColor3 = Color3.new(1, 1, 1)
+logoMarkTx.Text = "V"
+logoMarkTx.ZIndex = 8
+logoMarkTx.Parent = logoMark
 
-local Sub = Instance.new("TextLabel")
-Sub.Size = UDim2.new(1, -50, 0, 14)
-Sub.Position = UDim2.fromOffset(14, 28)
-Sub.BackgroundTransparency = 1
-Sub.Text = "Build " .. BUILD .. "  ·  RightShift hide"
-Sub.Font = Enum.Font.Gotham
-Sub.TextSize = 10
-Sub.TextColor3 = C.muted
-Sub.TextXAlignment = Enum.TextXAlignment.Left
-Sub.Parent = Header
+local logo = Instance.new("TextLabel")
+logo.BackgroundTransparency = 1
+logo.Position = UDim2.fromOffset(54, 0)
+logo.Size = UDim2.new(0, 160, 1, -18)
+logo.Font = Enum.Font.GothamBlack
+logo.TextSize = 14
+logo.TextColor3 = C.text
+logo.TextXAlignment = Enum.TextXAlignment.Left
+logo.TextYAlignment = Enum.TextYAlignment.Bottom
+logo.Text = "VOIDZ"
+logo.ZIndex = 7
+logo.Parent = header
 
-local CloseBtn = Instance.new("TextButton")
-CloseBtn.Size = UDim2.fromOffset(26, 26)
-CloseBtn.Position = UDim2.new(1, -36, 0, 12)
-CloseBtn.BackgroundColor3 = C.danger
-CloseBtn.Text = "X"
-CloseBtn.Font = Enum.Font.GothamBold
-CloseBtn.TextSize = 11
-CloseBtn.TextColor3 = C.text
-CloseBtn.BorderSizePixel = 0
-CloseBtn.Parent = Header
-corner(CloseBtn, 8)
-CloseBtn.MouseButton1Click:Connect(function()
-	screen.Enabled = not screen.Enabled
+local verL = Instance.new("TextLabel")
+verL.BackgroundTransparency = 1
+verL.Position = UDim2.fromOffset(54, HEADER_H - 20)
+verL.Size = UDim2.fromOffset(220, 14)
+verL.Font = Enum.Font.GothamMedium
+verL.TextSize = 9
+verL.TextColor3 = C.accent2
+verL.TextXAlignment = Enum.TextXAlignment.Left
+verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.1.0" or "CALI  ·  HUB  ·  v1.1.0"
+verL.ZIndex = 7
+verL.Parent = header
+
+local statusBg = Instance.new("Frame")
+statusBg.Size = UDim2.fromOffset(72, 24)
+statusBg.Position = UDim2.new(1, -122, 0.5, -12)
+statusBg.BackgroundColor3 = C.card
+statusBg.BackgroundTransparency = 0.12
+statusBg.BorderSizePixel = 0
+statusBg.ZIndex = 6
+statusBg.Parent = header
+corner(statusBg, 8)
+stroke(statusBg, C.strokeSoft, 1, 0.5)
+local statusDot = Instance.new("Frame")
+statusDot.Size = UDim2.fromOffset(6, 6)
+statusDot.Position = UDim2.fromOffset(8, 9)
+statusDot.BackgroundColor3 = isCaliPlace() and C.success or C.warn
+statusDot.BorderSizePixel = 0
+statusDot.ZIndex = 7
+statusDot.Parent = statusBg
+corner(statusDot, 3)
+local status = Instance.new("TextLabel")
+status.BackgroundTransparency = 1
+status.Size = UDim2.new(1, -18, 1, 0)
+status.Position = UDim2.fromOffset(16, 0)
+status.Font = Enum.Font.GothamBold
+status.TextSize = 9
+status.TextColor3 = C.text
+status.TextXAlignment = Enum.TextXAlignment.Left
+status.Text = isVoiceServer() and "VC" or "CALI"
+status.ZIndex = 7
+status.Parent = statusBg
+
+local close = Instance.new("TextButton")
+close.Size = UDim2.fromOffset(28, 28)
+close.Position = UDim2.new(1, -40, 0.5, -14)
+close.BackgroundColor3 = C.card
+close.Text = "×"
+close.TextColor3 = C.muted
+close.Font = Enum.Font.GothamBold
+close.TextSize = 15
+close.ZIndex = 8
+close.AutoButtonColor = false
+close.Parent = header
+corner(close, 14)
+local closeStroke = stroke(close, C.strokeSoft, 1, 0.5)
+close.MouseButton1Click:Connect(function() sg.Enabled = false end)
+close.MouseEnter:Connect(function()
+	tw(close, { BackgroundColor3 = C.danger, TextColor3 = Color3.new(1, 1, 1) }, 0.12)
+	tw(closeStroke, { Color = C.dangerText, Transparency = 0 }, 0.12)
+end)
+close.MouseLeave:Connect(function()
+	tw(close, { BackgroundColor3 = C.card, TextColor3 = C.muted }, 0.16)
+	tw(closeStroke, { Color = C.strokeSoft, Transparency = 0.45 }, 0.16)
 end)
 
-local TabBar = Instance.new("Frame")
-TabBar.Size = UDim2.new(1, -16, 0, 32)
-TabBar.Position = UDim2.fromOffset(8, 56)
-TabBar.BackgroundColor3 = C.bg2
-TabBar.BorderSizePixel = 0
-TabBar.Parent = Main
-corner(TabBar, 8)
+local dragging, dragStart, startPos
+header.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		dragging = true
+		dragStart = input.Position
+		startPos = root.Position
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then dragging = false end
+		end)
+	end
+end)
+UserInputService.InputChanged:Connect(function(input)
+	if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+		local d = input.Position - dragStart
+		root.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+	end
+end)
 
-local TabScroll = Instance.new("ScrollingFrame")
-TabScroll.Size = UDim2.new(1, -4, 1, -4)
-TabScroll.Position = UDim2.fromOffset(2, 2)
-TabScroll.BackgroundTransparency = 1
-TabScroll.BorderSizePixel = 0
-TabScroll.ScrollBarThickness = 0
-TabScroll.AutomaticCanvasSize = Enum.AutomaticSize.X
-TabScroll.ScrollingDirection = Enum.ScrollingDirection.X
-TabScroll.Parent = TabBar
-local TabLayout = Instance.new("UIListLayout")
-TabLayout.Padding = UDim.new(0, 4)
-TabLayout.FillDirection = Enum.FillDirection.Horizontal
-TabLayout.Parent = TabScroll
+local side = Instance.new("ScrollingFrame")
+side.Size = UDim2.new(0, SIDE_W, 1, -(HEADER_H + FOOTER_H))
+side.Position = UDim2.fromOffset(0, HEADER_H)
+side.BackgroundColor3 = C.bg
+side.BackgroundTransparency = 0.15
+side.BorderSizePixel = 0
+side.ScrollBarThickness = 2
+side.ScrollBarImageColor3 = C.accent
+side.AutomaticCanvasSize = Enum.AutomaticSize.Y
+side.CanvasSize = UDim2.new()
+side.ZIndex = 5
+side.Parent = root
+pad(side, 8, 8, 10, 8)
+local sideLay = Instance.new("UIListLayout")
+sideLay.Padding = UDim.new(0, 3)
+sideLay.SortOrder = Enum.SortOrder.LayoutOrder
+sideLay.Parent = side
 
-local Content = Instance.new("Frame")
-Content.Size = UDim2.new(1, -16, 1, -100)
-Content.Position = UDim2.fromOffset(8, 94)
-Content.BackgroundColor3 = C.bg2
-Content.BorderSizePixel = 0
-Content.ClipsDescendants = true
-Content.Parent = Main
-corner(Content, 10)
+local content = Instance.new("Frame")
+content.Size = UDim2.new(1, -SIDE_W, 1, -(HEADER_H + FOOTER_H + 28))
+content.Position = UDim2.fromOffset(SIDE_W, HEADER_H)
+content.BackgroundTransparency = 1
+content.ClipsDescendants = true
+content.ZIndex = 5
+content.Parent = root
 
-local ContentScroll = Instance.new("ScrollingFrame")
-ContentScroll.Size = UDim2.new(1, -8, 1, -8)
-ContentScroll.Position = UDim2.fromOffset(4, 4)
-ContentScroll.BackgroundTransparency = 1
-ContentScroll.BorderSizePixel = 0
-ContentScroll.ScrollBarThickness = 3
-ContentScroll.ScrollBarImageColor3 = C.accent
-ContentScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-ContentScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-ContentScroll.Parent = Content
-local ContentLayout = Instance.new("UIListLayout")
-ContentLayout.Padding = UDim.new(0, 4)
-ContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
-ContentLayout.Parent = ContentScroll
+local tipBar = Instance.new("TextLabel")
+tipBar.Size = UDim2.new(1, -SIDE_W - 16, 0, 22)
+tipBar.Position = UDim2.new(0, SIDE_W + 8, 1, -(FOOTER_H + 24))
+tipBar.BackgroundTransparency = 1
+tipBar.Font = Enum.Font.Gotham
+tipBar.TextSize = 10
+tipBar.TextColor3 = C.muted
+tipBar.TextXAlignment = Enum.TextXAlignment.Left
+tipBar.TextTruncate = Enum.TextTruncate.AtEnd
+tipBar.Text = ""
+tipBar.ZIndex = 6
+tipBar.Parent = root
+local function showTip(t)
+	tipBar.Text = t or ""
+end
 
-local tabFrames = {}
+local footer = Instance.new("Frame")
+footer.Size = UDim2.new(1, 0, 0, FOOTER_H)
+footer.Position = UDim2.new(0, 0, 1, -FOOTER_H)
+footer.BackgroundColor3 = C.bg2
+footer.BorderSizePixel = 0
+footer.ZIndex = 5
+footer.Parent = root
+local footL = Instance.new("TextLabel")
+footL.BackgroundTransparency = 1
+footL.Size = UDim2.new(0.5, -10, 1, 0)
+footL.Position = UDim2.fromOffset(12, 0)
+footL.Font = Enum.Font.GothamMedium
+footL.TextSize = 9
+footL.TextColor3 = C.muted
+footL.TextXAlignment = Enum.TextXAlignment.Left
+footL.Text = "RightShift hide  ·  VOIDZHUB"
+footL.Parent = footer
+local footR = Instance.new("TextLabel")
+footR.BackgroundTransparency = 1
+footR.Size = UDim2.new(0.5, -10, 1, 0)
+footR.Position = UDim2.new(0.5, 0, 0, 0)
+footR.Font = Enum.Font.GothamMedium
+footR.TextSize = 9
+footR.TextColor3 = C.muted
+footR.TextXAlignment = Enum.TextXAlignment.Right
+footR.Text = ""
+footR.Parent = footer
+task.spawn(function()
+	while footer.Parent do
+		local tag = isVoiceServer() and "VC" or "main"
+		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.1.0"
+		task.wait(2)
+	end
+end)
+
+local function makeScroll(parent)
+	local sc = Instance.new("ScrollingFrame")
+	sc.Size = UDim2.fromScale(1, 1)
+	sc.BackgroundTransparency = 1
+	sc.BorderSizePixel = 0
+	sc.ScrollBarThickness = 3
+	sc.ScrollBarImageColor3 = C.accent
+	sc.ScrollBarImageTransparency = 0.35
+	sc.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	sc.CanvasSize = UDim2.new()
+	sc.Parent = parent
+	local lay = Instance.new("UIListLayout")
+	lay.Padding = UDim.new(0, 7)
+	lay.SortOrder = Enum.SortOrder.LayoutOrder
+	lay.Parent = sc
+	pad(sc, 12, 12, 16, 12)
+	return sc
+end
+
 local orderN = 0
 local function n()
 	orderN += 1
 	return orderN
 end
 
-local function makeSection(parent, text)
-	local f = Instance.new("Frame")
-	f.Size = UDim2.new(1, 0, 0, 20)
-	f.BackgroundTransparency = 1
-	f.LayoutOrder = n()
-	f.Parent = parent
-	local lbl = Instance.new("TextLabel")
-	lbl.Size = UDim2.fromScale(1, 1)
-	lbl.BackgroundTransparency = 1
-	lbl.Text = string.upper(text)
-	lbl.Font = Enum.Font.GothamBold
-	lbl.TextSize = 10
-	lbl.TextColor3 = C.accent
-	lbl.TextXAlignment = Enum.TextXAlignment.Left
-	lbl.Parent = f
+local function section(parent, text)
+	local wrap = Instance.new("Frame")
+	wrap.LayoutOrder = n()
+	wrap.Size = UDim2.new(1, -4, 0, 24)
+	wrap.BackgroundTransparency = 1
+	wrap.Parent = parent
+	local bar = Instance.new("Frame")
+	bar.Size = UDim2.fromOffset(10, 2)
+	bar.Position = UDim2.fromOffset(2, 11)
+	bar.BackgroundColor3 = C.accent
+	bar.BorderSizePixel = 0
+	bar.Parent = wrap
+	corner(bar, 1)
+	local l = Instance.new("TextLabel")
+	l.BackgroundTransparency = 1
+	l.Size = UDim2.new(1, -22, 1, 0)
+	l.Position = UDim2.fromOffset(16, 0)
+	l.Font = Enum.Font.GothamBold
+	l.TextSize = 10
+	l.TextColor3 = C.accent2
+	l.TextXAlignment = Enum.TextXAlignment.Left
+	l.Text = tostring(text or ""):upper()
+	l.Parent = wrap
+	local line = Instance.new("Frame")
+	line.Size = UDim2.new(1, -16, 0, 1)
+	line.Position = UDim2.new(0, 14, 1, -1)
+	line.BackgroundColor3 = C.strokeSoft
+	line.BackgroundTransparency = 0.62
+	line.BorderSizePixel = 0
+	line.Parent = wrap
 end
 
-local function makeButton(parent, text, cb)
-	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.new(1, 0, 0, 28)
-	btn.BackgroundColor3 = C.card
-	btn.Text = ""
-	btn.BorderSizePixel = 0
-	btn.LayoutOrder = n()
-	btn.Parent = parent
-	corner(btn, 6)
-	local lbl = Instance.new("TextLabel")
-	lbl.Size = UDim2.new(1, -12, 1, 0)
-	lbl.Position = UDim2.fromOffset(10, 0)
-	lbl.BackgroundTransparency = 1
-	lbl.Text = text
-	lbl.Font = Enum.Font.GothamMedium
-	lbl.TextSize = 12
-	lbl.TextColor3 = C.text
-	lbl.TextXAlignment = Enum.TextXAlignment.Left
-	lbl.Parent = btn
-	btn.MouseButton1Click:Connect(function()
-		if cb then cb() end
-	end)
-end
-
-local function makeToggle(parent, text, key, fn)
-	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.new(1, 0, 0, 28)
-	btn.BackgroundColor3 = C.card
-	btn.Text = ""
-	btn.BorderSizePixel = 0
-	btn.LayoutOrder = n()
-	btn.Parent = parent
-	corner(btn, 6)
-	local lbl = Instance.new("TextLabel")
-	lbl.Size = UDim2.new(1, -56, 1, 0)
-	lbl.Position = UDim2.fromOffset(10, 0)
-	lbl.BackgroundTransparency = 1
-	lbl.Text = text
-	lbl.Font = Enum.Font.GothamMedium
-	lbl.TextSize = 12
-	lbl.TextColor3 = C.text
-	lbl.TextXAlignment = Enum.TextXAlignment.Left
-	lbl.Parent = btn
-	local ind = Instance.new("Frame")
-	ind.Size = UDim2.fromOffset(36, 16)
-	ind.Position = UDim2.new(1, -46, 0.5, -8)
-	ind.BackgroundColor3 = C.danger
-	ind.BorderSizePixel = 0
-	ind.Parent = btn
-	corner(ind, 8)
-	local dot = Instance.new("Frame")
-	dot.Size = UDim2.fromOffset(12, 12)
-	dot.Position = UDim2.fromOffset(2, 2)
-	dot.BackgroundColor3 = C.text
-	dot.BorderSizePixel = 0
-	dot.Parent = ind
-	corner(dot, 6)
-	local function paint()
-		local on = S.toggles[key]
-		ind.BackgroundColor3 = on and C.success or C.danger
-		dot.Position = on and UDim2.new(1, -14, 0, 2) or UDim2.fromOffset(2, 2)
+local function makeButton(parent, opts)
+	opts = opts or {}
+	local wrap = Instance.new("Frame")
+	wrap.LayoutOrder = n()
+	wrap.Size = UDim2.new(1, -6, 0, 36)
+	wrap.BackgroundColor3 = opts.danger and C.danger or C.card
+	wrap.BorderSizePixel = 0
+	wrap.Parent = parent
+	corner(wrap, 10)
+	local bStroke = stroke(wrap, opts.danger and C.dangerStroke or C.strokeSoft, 1, opts.danger and 0.2 or 0.4)
+	if not opts.danger then glass(wrap) end
+	local b = Instance.new("TextButton")
+	b.Size = UDim2.fromScale(1, 1)
+	b.BackgroundTransparency = 1
+	b.BorderSizePixel = 0
+	b.Font = Enum.Font.GothamBold
+	b.TextSize = 13
+	b.TextColor3 = opts.danger and C.dangerText or Color3.new(1, 1, 1)
+	b.Text = opts.title or "Run"
+	b.AutoButtonColor = false
+	b.Parent = wrap
+	if opts.tip then
+		b.MouseEnter:Connect(function() showTip(opts.tip) end)
+		b.MouseLeave:Connect(function() showTip("") end)
 	end
-	btn.MouseButton1Click:Connect(function()
-		local on = not S.toggles[key]
-		if fn then fn(on) else S.toggles[key] = on end
-		paint()
+	b.MouseEnter:Connect(function()
+		tw(wrap, { BackgroundColor3 = opts.danger and Color3.fromRGB(90, 32, 52) or C.card2 }, 0.12)
+		tw(bStroke, { Transparency = 0.12, Color = opts.danger and C.dangerStroke or C.accent }, 0.12)
 	end)
-	paint()
+	b.MouseLeave:Connect(function()
+		tw(wrap, { BackgroundColor3 = opts.danger and C.danger or C.card }, 0.16)
+		tw(bStroke, { Transparency = opts.danger and 0.2 or 0.4, Color = opts.danger and C.dangerStroke or C.strokeSoft }, 0.16)
+	end)
+	b.MouseButton1Click:Connect(function()
+		if opts.callback then
+			local ok, err = pcall(opts.callback)
+			if not ok then notify(HUB_NAME, "Err: " .. tostring(err):sub(1, 50), 3) end
+		end
+	end)
 end
 
-local function makeSlider(parent, text, min, max, getter, setter)
-	local frame = Instance.new("Frame")
-	frame.Size = UDim2.new(1, 0, 0, 40)
-	frame.BackgroundColor3 = C.card
-	frame.BorderSizePixel = 0
-	frame.LayoutOrder = n()
-	frame.Parent = parent
-	corner(frame, 6)
-	local lbl = Instance.new("TextLabel")
-	lbl.Size = UDim2.new(0.55, 0, 0, 14)
-	lbl.Position = UDim2.fromOffset(10, 5)
-	lbl.BackgroundTransparency = 1
-	lbl.Text = text
-	lbl.Font = Enum.Font.GothamMedium
-	lbl.TextSize = 11
-	lbl.TextColor3 = C.text
-	lbl.TextXAlignment = Enum.TextXAlignment.Left
-	lbl.Parent = frame
+local function makeToggle(parent, opts)
+	opts = opts or {}
+	local id = opts.id
+	local rowH = opts.desc and 46 or 38
+	local row = Instance.new("Frame")
+	row.LayoutOrder = n()
+	row.Size = UDim2.new(1, -6, 0, rowH)
+	row.BackgroundColor3 = C.card
+	row.BorderSizePixel = 0
+	row.Parent = parent
+	corner(row, 10)
+	local rowStroke = stroke(row, C.strokeSoft, 1, 0.58)
+	glass(row)
+	local title = Instance.new("TextLabel")
+	title.BackgroundTransparency = 1
+	title.Size = UDim2.new(1, -90, 0, 14)
+	title.Position = UDim2.fromOffset(12, opts.desc and 6 or 11)
+	title.Font = Enum.Font.GothamMedium
+	title.TextSize = 12
+	title.TextColor3 = C.text
+	title.TextXAlignment = Enum.TextXAlignment.Left
+	title.Text = opts.title or "Toggle"
+	title.Parent = row
+	if opts.desc then
+		local d = Instance.new("TextLabel")
+		d.BackgroundTransparency = 1
+		d.Size = UDim2.new(1, -90, 0, 12)
+		d.Position = UDim2.fromOffset(12, 22)
+		d.Font = Enum.Font.Gotham
+		d.TextSize = 10
+		d.TextColor3 = C.muted
+		d.TextXAlignment = Enum.TextXAlignment.Left
+		d.Text = opts.desc
+		d.Parent = row
+	end
+	if opts.tip then
+		row.MouseEnter:Connect(function() showTip(opts.tip) end)
+		row.MouseLeave:Connect(function() showTip("") end)
+	end
+	local pillW, pillH, knobS = 40, 20, 16
+	local pill = Instance.new("TextButton")
+	pill.Size = UDim2.fromOffset(pillW, pillH)
+	pill.Position = UDim2.new(1, -(pillW + 12), 0.5, -pillH / 2)
+	pill.BackgroundColor3 = C.bg
+	pill.Text = ""
+	pill.AutoButtonColor = false
+	pill.Parent = row
+	corner(pill, pillH / 2)
+	local pillStroke = stroke(pill, C.strokeSoft, 1, 0.4)
+	local knob = Instance.new("Frame")
+	knob.Size = UDim2.fromOffset(knobS, knobS)
+	knob.Position = UDim2.fromOffset(2, (pillH - knobS) / 2)
+	knob.BackgroundColor3 = C.muted
+	knob.BorderSizePixel = 0
+	knob.Parent = pill
+	corner(knob, knobS / 2)
+	local knobOff = UDim2.fromOffset(2, (pillH - knobS) / 2)
+	local knobOn = UDim2.fromOffset(pillW - knobS - 2, (pillH - knobS) / 2)
+	local function render()
+		local on = S.toggles[id] == true
+		if on then
+			tw(pill, { BackgroundColor3 = C.accent }, 0.14)
+			tw(knob, { Position = knobOn, BackgroundColor3 = Color3.new(1, 1, 1) }, 0.14)
+			tw(pillStroke, { Color = C.accent2, Transparency = 0.15 }, 0.14)
+			rowStroke.Color = C.accent
+			rowStroke.Transparency = 0.42
+		else
+			tw(pill, { BackgroundColor3 = C.bg }, 0.14)
+			tw(knob, { Position = knobOff, BackgroundColor3 = C.muted }, 0.14)
+			tw(pillStroke, { Color = C.strokeSoft, Transparency = 0.4 }, 0.14)
+			rowStroke.Color = C.strokeSoft
+			rowStroke.Transparency = 0.58
+		end
+	end
+	render()
+	pill.MouseButton1Click:Connect(function()
+		local on = not (S.toggles[id] == true)
+		if opts.callback then
+			local ok, err = pcall(opts.callback, on)
+			if not ok then notify(HUB_NAME, "Err: " .. tostring(err):sub(1, 40), 2) end
+		else
+			S.toggles[id] = on
+		end
+		render()
+	end)
+end
+
+local function makeSlider(parent, opts)
+	opts = opts or {}
+	local min, max = opts.min or 0, opts.max or 100
+	local row = Instance.new("Frame")
+	row.LayoutOrder = n()
+	row.Size = UDim2.new(1, -6, 0, 50)
+	row.BackgroundColor3 = C.card
+	row.BorderSizePixel = 0
+	row.Parent = parent
+	corner(row, 10)
+	stroke(row, C.strokeSoft, 1, 0.58)
+	glass(row)
+	local label = Instance.new("TextLabel")
+	label.BackgroundTransparency = 1
+	label.Size = UDim2.new(0.65, 0, 0, 14)
+	label.Position = UDim2.fromOffset(12, 8)
+	label.Font = Enum.Font.GothamMedium
+	label.TextSize = 11
+	label.TextColor3 = C.text
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Text = opts.title or "Slider"
+	label.Parent = row
 	local val = Instance.new("TextLabel")
-	val.Size = UDim2.new(0.45, -10, 0, 14)
-	val.Position = UDim2.new(0.55, 0, 0, 5)
 	val.BackgroundTransparency = 1
-	val.Text = tostring(getter())
+	val.Size = UDim2.new(0.3, -10, 0, 14)
+	val.Position = UDim2.new(0.68, 0, 0, 8)
 	val.Font = Enum.Font.GothamBold
 	val.TextSize = 11
 	val.TextColor3 = C.accent2
 	val.TextXAlignment = Enum.TextXAlignment.Right
-	val.Parent = frame
-	local bar = Instance.new("Frame")
-	bar.Size = UDim2.new(1, -20, 0, 6)
-	bar.Position = UDim2.fromOffset(10, 26)
-	bar.BackgroundColor3 = C.border
-	bar.BorderSizePixel = 0
-	bar.Parent = frame
-	corner(bar, 3)
+	val.Text = tostring(opts.get and opts.get() or min)
+	val.Parent = row
+	local track = Instance.new("Frame")
+	track.Size = UDim2.new(1, -24, 0, 6)
+	track.Position = UDim2.fromOffset(12, 32)
+	track.BackgroundColor3 = C.bg
+	track.BorderSizePixel = 0
+	track.Parent = row
+	corner(track, 4)
+	local frac0 = ((opts.get and opts.get() or min) - min) / math.max(max - min, 1)
 	local fill = Instance.new("Frame")
-	fill.Size = UDim2.new(math.clamp((getter() - min) / (max - min), 0, 1), 0, 1, 0)
+	fill.Size = UDim2.new(frac0, 0, 1, 0)
 	fill.BackgroundColor3 = C.accent
 	fill.BorderSizePixel = 0
-	fill.Parent = bar
-	corner(fill, 3)
+	fill.Parent = track
+	corner(fill, 4)
 	local dragging = false
-	bar.InputBegan:Connect(function(i)
+	track.InputBegan:Connect(function(i)
 		if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true end
 	end)
 	UserInputService.InputEnded:Connect(function(i)
@@ -1074,18 +1398,19 @@ local function makeSlider(parent, text, min, max, getter, setter)
 	end)
 	UserInputService.InputChanged:Connect(function(i)
 		if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
-			local r = math.clamp((i.Position.X - bar.AbsolutePosition.X) / math.max(bar.AbsoluteSize.X, 1), 0, 1)
+			local r = math.clamp((i.Position.X - track.AbsolutePosition.X) / math.max(track.AbsoluteSize.X, 1), 0, 1)
 			local v = math.floor(min + (max - min) * r)
 			fill.Size = UDim2.new(r, 0, 1, 0)
 			val.Text = tostring(v)
-			setter(v)
+			if opts.set then opts.set(v) end
 		end
 	end)
 end
 
 local function makeInput(parent, placeholder, cb)
 	local box = Instance.new("TextBox")
-	box.Size = UDim2.new(1, 0, 0, 28)
+	box.LayoutOrder = n()
+	box.Size = UDim2.new(1, -6, 0, 34)
 	box.BackgroundColor3 = C.card
 	box.PlaceholderText = placeholder
 	box.PlaceholderColor3 = C.muted
@@ -1095,202 +1420,360 @@ local function makeInput(parent, placeholder, cb)
 	box.TextColor3 = C.text
 	box.ClearTextOnFocus = false
 	box.BorderSizePixel = 0
-	box.LayoutOrder = n()
 	box.Parent = parent
-	corner(box, 6)
-	box.FocusLost:Connect(function()
-		if cb then cb(box.Text) end
-	end)
+	corner(box, 10)
+	stroke(box, C.strokeSoft, 1, 0.5)
+	pad(box, 6, 10, 6, 10)
+	box.FocusLost:Connect(function() if cb then cb(box.Text) end end)
 	return box
 end
 
-local function createTab(name)
-	local tab = Instance.new("TextButton")
-	tab.Size = UDim2.fromOffset(72, 28)
-	tab.BackgroundColor3 = C.card
-	tab.Text = ""
-	tab.BorderSizePixel = 0
-	tab.Parent = TabScroll
-	corner(tab, 6)
-	local lbl = Instance.new("TextLabel")
-	lbl.Size = UDim2.fromScale(1, 1)
-	lbl.BackgroundTransparency = 1
-	lbl.Text = name
-	lbl.Font = Enum.Font.GothamBold
-	lbl.TextSize = 10
-	lbl.TextColor3 = C.muted
-	lbl.Parent = tab
-	local frame = Instance.new("Frame")
-	frame.Size = UDim2.new(1, 0, 0, 0)
-	frame.AutomaticSize = Enum.AutomaticSize.Y
-	frame.BackgroundTransparency = 1
-	frame.Visible = false
-	frame.Parent = ContentScroll
-	local lay = Instance.new("UIListLayout")
-	lay.Padding = UDim.new(0, 3)
-	lay.SortOrder = Enum.SortOrder.LayoutOrder
-	lay.Parent = frame
-	tabFrames[name] = { frame = frame, tab = tab, lbl = lbl }
-	tab.MouseButton1Click:Connect(function()
-		for _, pack in pairs(tabFrames) do
-			pack.frame.Visible = false
-			pack.tab.BackgroundColor3 = C.card
-			pack.lbl.TextColor3 = C.muted
+local TAB_DEFS = {
+	{ id = "home", icon = "HO", label = "Home" },
+	{ id = "combat", icon = "CB", label = "Combat" },
+	{ id = "guns", icon = "GN", label = "Guns" },
+	{ id = "farm", icon = "FM", label = "Farm" },
+	{ id = "move", icon = "MV", label = "Move" },
+	{ id = "visuals", icon = "VI", label = "Visuals" },
+	{ id = "tps", icon = "TP", label = "TPs" },
+	{ id = "players", icon = "PL", label = "Players" },
+	{ id = "misc", icon = "MS", label = "Misc" },
+}
+
+local panels, tabBtns = {}, {}
+local function switchTab(id)
+	for tid, p in pairs(panels) do
+		p.Visible = tid == id
+	end
+	for tid, btn in pairs(tabBtns) do
+		local on = tid == id
+		btn:SetAttribute("activeTab", on)
+		btn.BackgroundTransparency = on and 0.15 or 1
+		btn.BackgroundColor3 = on and C.card or C.bg
+		local rail = btn:FindFirstChild("Rail")
+		if rail then rail.BackgroundTransparency = on and 0 or 1 end
+		local badge = btn:FindFirstChild("Badge")
+		if badge then
+			badge.BackgroundColor3 = on and C.accentDim or C.bg
 		end
-		frame.Visible = true
-		tab.BackgroundColor3 = C.accent
-		lbl.TextColor3 = C.text
-	end)
-	return frame
+	end
 end
 
-local home = createTab("Home")
-local combat = createTab("Combat")
-local guns = createTab("Guns")
-local farm = createTab("Farm")
-local move = createTab("Move")
-local vis = createTab("Visuals")
-local tps = createTab("TPs")
-local ply = createTab("Players")
-local misc = createTab("Misc")
-tabFrames["Home"].frame.Visible = true
-tabFrames["Home"].tab.BackgroundColor3 = C.accent
-tabFrames["Home"].lbl.TextColor3 = C.text
+for i, def in ipairs(TAB_DEFS) do
+	local btnH = 30
+	local btn = Instance.new("TextButton")
+	btn.LayoutOrder = i
+	btn.Size = UDim2.new(1, 0, 0, btnH)
+	btn.BackgroundColor3 = C.bg
+	btn.BackgroundTransparency = 1
+	btn.BorderSizePixel = 0
+	btn.Text = ""
+	btn.AutoButtonColor = false
+	btn.ZIndex = 5
+	btn.Parent = side
+	corner(btn, 8)
+	local tabRail = Instance.new("Frame")
+	tabRail.Name = "Rail"
+	tabRail.Size = UDim2.new(0, 2, 0, 12)
+	tabRail.Position = UDim2.fromOffset(3, (btnH - 12) / 2)
+	tabRail.BackgroundColor3 = C.accent
+	tabRail.BackgroundTransparency = 1
+	tabRail.BorderSizePixel = 0
+	tabRail.ZIndex = 6
+	tabRail.Parent = btn
+	corner(tabRail, 1)
+	btn.MouseEnter:Connect(function()
+		if not btn:GetAttribute("activeTab") then
+			tw(btn, { BackgroundTransparency = 0.62, BackgroundColor3 = C.card }, 0.12)
+		end
+	end)
+	btn.MouseLeave:Connect(function()
+		if not btn:GetAttribute("activeTab") then
+			tw(btn, { BackgroundTransparency = 1, BackgroundColor3 = C.bg }, 0.12)
+		end
+	end)
+	local badge = Instance.new("Frame")
+	badge.Name = "Badge"
+	badge.Size = UDim2.fromOffset(18, 18)
+	badge.Position = UDim2.fromOffset(10, btnH / 2 - 9)
+	badge.BackgroundColor3 = C.bg
+	badge.BackgroundTransparency = 0.1
+	badge.BorderSizePixel = 0
+	badge.ZIndex = 6
+	badge.Parent = btn
+	corner(badge, 6)
+	stroke(badge, C.strokeSoft, 1, 0.7)
+	local badgeTx = Instance.new("TextLabel")
+	badgeTx.BackgroundTransparency = 1
+	badgeTx.Size = UDim2.fromScale(1, 1)
+	badgeTx.Font = Enum.Font.GothamBold
+	badgeTx.TextSize = 8
+	badgeTx.TextColor3 = C.accent2
+	badgeTx.Text = def.icon
+	badgeTx.ZIndex = 7
+	badgeTx.Parent = badge
+	local lab = Instance.new("TextLabel")
+	lab.BackgroundTransparency = 1
+	lab.Size = UDim2.new(1, -36, 1, 0)
+	lab.Position = UDim2.fromOffset(34, 0)
+	lab.Font = Enum.Font.GothamMedium
+	lab.TextSize = 11
+	lab.TextColor3 = C.text
+	lab.TextXAlignment = Enum.TextXAlignment.Left
+	lab.Text = def.label
+	lab.ZIndex = 6
+	lab.Parent = btn
+	tabBtns[def.id] = btn
+	local panel = Instance.new("Frame")
+	panel.Name = def.id
+	panel.Size = UDim2.fromScale(1, 1)
+	panel.BackgroundTransparency = 1
+	panel.Visible = false
+	panel.ZIndex = 5
+	panel.Parent = content
+	panels[def.id] = panel
+	local sc = makeScroll(panel)
+	panels[def.id] = panel
+	btn.MouseButton1Click:Connect(function() switchTab(def.id) end)
+	def._sc = sc
+end
+
+local prem = Instance.new("Frame")
+prem.LayoutOrder = 999
+prem.Size = UDim2.new(1, 0, 0, 38)
+prem.BackgroundColor3 = C.card
+prem.BackgroundTransparency = 0.08
+prem.BorderSizePixel = 0
+prem.Parent = side
+corner(prem, 10)
+stroke(prem, C.accent, 1, 0.6)
+glass(prem)
+local premMark = Instance.new("Frame")
+premMark.Size = UDim2.fromOffset(22, 22)
+premMark.Position = UDim2.fromOffset(8, 9)
+premMark.BackgroundColor3 = C.accentDim
+premMark.BorderSizePixel = 0
+premMark.Parent = prem
+corner(premMark, 11)
+local premV = Instance.new("TextLabel")
+premV.BackgroundTransparency = 1
+premV.Size = UDim2.fromScale(1, 1)
+premV.Font = Enum.Font.GothamBlack
+premV.TextSize = 11
+premV.TextColor3 = C.accent2
+premV.Text = "V"
+premV.Parent = premMark
+local premL = Instance.new("TextLabel")
+premL.BackgroundTransparency = 1
+premL.Size = UDim2.new(1, -40, 1, 0)
+premL.Position = UDim2.fromOffset(36, 0)
+premL.Font = Enum.Font.GothamMedium
+premL.TextSize = 9
+premL.TextColor3 = C.muted
+premL.TextXAlignment = Enum.TextXAlignment.Left
+premL.TextWrapped = true
+premL.Text = "FULL\nVOIDZHUB"
+premL.Parent = prem
+
+local home = TAB_DEFS[1]._sc
+local combat = TAB_DEFS[2]._sc
+local guns = TAB_DEFS[3]._sc
+local farm = TAB_DEFS[4]._sc
+local move = TAB_DEFS[5]._sc
+local vis = TAB_DEFS[6]._sc
+local tps = TAB_DEFS[7]._sc
+local ply = TAB_DEFS[8]._sc
+local misc = TAB_DEFS[9]._sc
 
 -- HOME
-makeSection(home, "VOIDZ CALI SHOOTOUT")
-makeButton(home, "PlaceId " .. tostring(game.PlaceId), function() end)
-makeButton(home, "Build " .. BUILD, function() end)
-makeButton(home, "Key VOIDZHUB  ·  RightShift hide", function() end)
-if game.PlaceId ~= PLACE_ID then
-	makeButton(home, "Warning: this is not Cali Shootout PlaceId", function() end)
+section(home, "WELCOME")
+do
+	local hero = Instance.new("Frame")
+	hero.LayoutOrder = n()
+	hero.Size = UDim2.new(1, -6, 0, 92)
+	hero.BackgroundColor3 = C.card
+	hero.BorderSizePixel = 0
+	hero.Parent = home
+	corner(hero, 14)
+	stroke(hero, C.accent, 1, 0.5)
+	local rail = Instance.new("Frame")
+	rail.Size = UDim2.new(0, 3, 1, -24)
+	rail.Position = UDim2.fromOffset(12, 12)
+	rail.BackgroundColor3 = C.accent
+	rail.BorderSizePixel = 0
+	rail.Parent = hero
+	corner(rail, 2)
+	local ht = Instance.new("TextLabel")
+	ht.BackgroundTransparency = 1
+	ht.Size = UDim2.new(1, -36, 0, 26)
+	ht.Position = UDim2.fromOffset(24, 16)
+	ht.Font = Enum.Font.GothamBlack
+	ht.TextSize = 20
+	ht.TextColor3 = C.text
+	ht.TextXAlignment = Enum.TextXAlignment.Left
+	ht.Text = "VOIDZ  CALI"
+	ht.Parent = hero
+	local hs = Instance.new("TextLabel")
+	hs.BackgroundTransparency = 1
+	hs.Size = UDim2.new(1, -36, 0, 36)
+	hs.Position = UDim2.fromOffset(24, 44)
+	hs.Font = Enum.Font.Gotham
+	hs.TextSize = 12
+	hs.TextColor3 = C.muted
+	hs.TextXAlignment = Enum.TextXAlignment.Left
+	hs.TextWrapped = true
+	hs.Text = isVoiceServer()
+		and "Voice Chat server  ·  same tools as main  ·  Combat God still shoots"
+		or "Main map  ·  Combat God keeps you shooting  ·  RightShift hide"
+	hs.Parent = hero
 end
-makeSection(home, "QUICK")
-makeToggle(home, "Combat God (shoot while invincible)", "combatGod", setCombatGod)
-makeToggle(home, "Silent Aim", "silentAim", function(on)
-	S.toggles.silentAim = on
-	if on then installSilentAim() end
-end)
-makeToggle(home, "ESP + wallet spy", "esp", setESP)
+section(home, "QUICK")
+makeToggle(home, {
+	id = "combatGod", title = "Combat God",
+	desc = "Invincible — guns still fire",
+	tip = "No ForceField. Health lock + anti-KO so you can keep shooting.",
+	callback = setCombatGod,
+})
+makeToggle(home, {
+	id = "silentAim", title = "Silent Aim",
+	tip = "Redirects shots at the closest head in FOV.",
+	callback = function(on) S.toggles.silentAim = on if on then installSilentAim() end end,
+})
+makeToggle(home, {
+	id = "esp", title = "ESP + wallet spy",
+	tip = "Name, HP, cash, distance.",
+	callback = setESP,
+})
 
 -- COMBAT
-makeSection(combat, "SURVIVE")
-makeToggle(combat, "Combat God — invincible + still shoot", "combatGod", setCombatGod)
-makeToggle(combat, "Anti Ragdoll / KO flags", "antiRagdoll", function(on)
-	S.toggles.antiRagdoll = on
-	dropConn("antiRag")
-	if not on then return end
-	addConn("antiRag", RunService.Heartbeat:Connect(function()
-		if not S.toggles.antiRagdoll then return end
-		applyCombatGod(hum(), char())
-	end))
-end)
-makeSection(combat, "AIM")
-makeToggle(combat, "Silent Aim", "silentAim", function(on)
-	S.toggles.silentAim = on
-	if on then installSilentAim() notify(HUB_NAME, "Silent Aim ON", 1.2) end
-end)
-makeToggle(combat, "Hard Aimbot (camera)", "aimbot", setAimbot)
-makeSlider(combat, "Silent FOV", 20, 360, function() return S.silentFov end, function(v) S.silentFov = v end)
-makeSection(combat, "HITBOX / AURA")
-makeToggle(combat, "Hitbox Expander", "hitbox", setHitboxes)
-makeSlider(combat, "Hitbox Size", 2, 25, function() return S.hitboxSize end, function(v) S.hitboxSize = v end)
-makeToggle(combat, "Kill Aura (look + fire)", "killAura", setKillAura)
-makeSlider(combat, "Aura Range", 10, 250, function() return S.killRange end, function(v) S.killRange = v end)
-makeButton(combat, "Kill All (TP + fire burst)", function()
-	task.spawn(function()
-		local homeCF = hrp() and hrp().CFrame
-		for _, p in ipairs(Players:GetPlayers()) do
-			if aliveP(p) then
-				local r = p.Character.HumanoidRootPart
-				tp(r.CFrame * CFrame.new(0, 0, 3))
-				for _ = 1, 8 do
-					fireGun()
-					task.wait(0.05)
+section(combat, "SURVIVE")
+makeToggle(combat, {
+	id = "combatGod", title = "Combat God",
+	desc = "Invincible + still shoot",
+	callback = setCombatGod,
+})
+makeToggle(combat, {
+	id = "antiRagdoll", title = "Anti Ragdoll / KO",
+	callback = function(on)
+		S.toggles.antiRagdoll = on
+		dropConn("antiRag")
+		if not on then return end
+		addConn("antiRag", RunService.Heartbeat:Connect(function()
+			if not S.toggles.antiRagdoll then return end
+			applyCombatGod(hum(), char())
+		end))
+	end,
+})
+section(combat, "AIM")
+makeToggle(combat, {
+	id = "silentAim", title = "Silent Aim",
+	callback = function(on) S.toggles.silentAim = on if on then installSilentAim() end end,
+})
+makeToggle(combat, { id = "aimbot", title = "Hard Aimbot (camera)", callback = setAimbot })
+makeSlider(combat, { title = "Silent FOV", min = 20, max = 360, get = function() return S.silentFov end, set = function(v) S.silentFov = v end })
+section(combat, "HITBOX / AURA")
+makeToggle(combat, { id = "hitbox", title = "Hitbox Expander", callback = setHitboxes })
+makeSlider(combat, { title = "Hitbox Size", min = 2, max = 25, get = function() return S.hitboxSize end, set = function(v) S.hitboxSize = v end })
+makeToggle(combat, { id = "killAura", title = "Kill Aura", callback = setKillAura })
+makeSlider(combat, { title = "Aura Range", min = 10, max = 250, get = function() return S.killRange end, set = function(v) S.killRange = v end })
+makeButton(combat, {
+	title = "Kill All (TP + fire)",
+	tip = "Walks every player, fires, returns home.",
+	callback = function()
+		task.spawn(function()
+			local homeCF = hrp() and hrp().CFrame
+			for _, p in ipairs(Players:GetPlayers()) do
+				if aliveP(p) then
+					local r = p.Character.HumanoidRootPart
+					tp(r.CFrame * CFrame.new(0, 0, 3))
+					for _ = 1, 8 do fireGun() task.wait(0.05) end
 				end
 			end
-		end
-		if homeCF then tp(homeCF) end
-		notify(HUB_NAME, "Kill-all pass done", 1.4)
-	end)
-end)
+			if homeCF then tp(homeCF) end
+			notify(HUB_NAME, "Kill-all pass done", 1.4)
+		end)
+	end,
+})
 
 -- GUNS
-makeSection(guns, "GUN MODS")
-makeToggle(guns, "No Recoil", "noRecoil", function(on) S.toggles.noRecoil = on end)
-makeToggle(guns, "No Spread", "noSpread", function(on) S.toggles.noSpread = on end)
-makeToggle(guns, "Infinite Ammo", "infAmmo", function(on) S.toggles.infAmmo = on end)
-makeToggle(guns, "Never Jam", "noJam", function(on) S.toggles.noJam = on end)
-makeToggle(guns, "Rapid Fire / no cooldown", "rapidFire", function(on) S.toggles.rapidFire = on end)
-makeToggle(guns, "One Shot Damage", "oneShot", function(on) S.toggles.oneShot = on end)
-addConn("guns", RunService.Heartbeat:Connect(function()
-	if S.toggles.noRecoil or S.toggles.noSpread or S.toggles.infAmmo
-		or S.toggles.noJam or S.toggles.rapidFire or S.toggles.oneShot then
-		applyGunMods()
-	end
-end))
+section(guns, "GUN MODS")
+makeToggle(guns, { id = "noRecoil", title = "No Recoil", callback = function(on) S.toggles.noRecoil = on end })
+makeToggle(guns, { id = "noSpread", title = "No Spread", callback = function(on) S.toggles.noSpread = on end })
+makeToggle(guns, { id = "infAmmo", title = "Infinite Ammo", callback = function(on) S.toggles.infAmmo = on end })
+makeToggle(guns, { id = "noJam", title = "Never Jam", callback = function(on) S.toggles.noJam = on end })
+makeToggle(guns, { id = "rapidFire", title = "Rapid Fire / no cooldown", callback = function(on) S.toggles.rapidFire = on end })
+makeToggle(guns, { id = "oneShot", title = "One Shot Damage", callback = function(on) S.toggles.oneShot = on end })
 
 -- FARM
-makeSection(farm, "AUTOFARM")
-makeToggle(farm, "Instant Prompts", "instantPrompt", setInstantPrompt)
-makeToggle(farm, "Auto Box / Crate", "farmBox", function(on)
-	if on then startFarm("farmBox", { "box", "crate", "package", "parcel" }) else stopFarm("farmBox") end
-end)
-makeToggle(farm, "Auto Garbage / Trash", "farmTrash", function(on)
-	if on then startFarm("farmTrash", { "trash", "garbage", "bag", "dump" }) else stopFarm("farmTrash") end
-end)
-makeToggle(farm, "Auto Janitor / Mop / Clean", "farmMop", function(on)
-	if on then startFarm("farmMop", { "mop", "clean", "janitor", "spill" }) else stopFarm("farmMop") end
-end)
-makeToggle(farm, "Auto Car Rob / Lockpick", "farmCar", function(on)
-	if on then startFarm("farmCar", { "car", "lock", "steal", "vehicle", "hotwire" }) else stopFarm("farmCar") end
-end)
-makeToggle(farm, "Auto Grass / Leaf", "farmGrass", function(on)
-	if on then startFarm("farmGrass", { "grass", "leaf", "weed", "plant" }) else stopFarm("farmGrass") end
-end)
-makeSection(farm, "CHECK PRINTER")
-makeButton(farm, "TP Check 1", function() tp(CFrame.new(-2397.8, 109.8, -220.8)) end)
-makeButton(farm, "TP Check 2", function() tp(CFrame.new(-2452.3, 109.8, -222.7)) end)
-makeButton(farm, "TP Check Cashout", function() tp(CFrame.new(-2361, 5, 132.7)) end)
+section(farm, "AUTOFARM")
+makeToggle(farm, { id = "instantPrompt", title = "Instant Prompts", callback = setInstantPrompt })
+makeToggle(farm, {
+	id = "farmBox", title = "Auto Box / Crate",
+	callback = function(on) if on then startFarm("farmBox", { "box", "crate", "package", "parcel" }) else stopFarm("farmBox") end end,
+})
+makeToggle(farm, {
+	id = "farmTrash", title = "Auto Garbage / Trash",
+	callback = function(on) if on then startFarm("farmTrash", { "trash", "garbage", "bag", "dump" }) else stopFarm("farmTrash") end end,
+})
+makeToggle(farm, {
+	id = "farmMop", title = "Auto Janitor / Mop",
+	callback = function(on) if on then startFarm("farmMop", { "mop", "clean", "janitor", "spill" }) else stopFarm("farmMop") end end,
+})
+makeToggle(farm, {
+	id = "farmCar", title = "Auto Car Rob",
+	callback = function(on) if on then startFarm("farmCar", { "car", "lock", "steal", "vehicle", "hotwire" }) else stopFarm("farmCar") end end,
+})
+makeToggle(farm, {
+	id = "farmGrass", title = "Auto Grass / Leaf",
+	callback = function(on) if on then startFarm("farmGrass", { "grass", "leaf", "weed", "plant" }) else stopFarm("farmGrass") end end,
+})
+section(farm, "CHECK PRINTER")
+makeButton(farm, { title = "TP Check 1", callback = function() tp(CFrame.new(-2397.8, 109.8, -220.8)) end })
+makeButton(farm, { title = "TP Check 2", callback = function() tp(CFrame.new(-2452.3, 109.8, -222.7)) end })
+makeButton(farm, { title = "TP Check Cashout", callback = function() tp(CFrame.new(-2361, 5, 132.7)) end })
 
 -- MOVE
-makeSection(move, "MOVEMENT")
-makeToggle(move, "WalkSpeed Override", "speed", setSpeedLoop)
-makeSlider(move, "WalkSpeed", 16, 200, function() return S.walkSpeed end, function(v)
+section(move, "MOVEMENT")
+makeToggle(move, { id = "speed", title = "WalkSpeed Override", callback = setSpeedLoop })
+makeSlider(move, { title = "WalkSpeed", min = 16, max = 200, get = function() return S.walkSpeed end, set = function(v)
 	S.walkSpeed = v
 	local h = hum()
 	if h then h.WalkSpeed = v end
-end)
-makeToggle(move, "Fly (WASD Space/Shift)", "fly", setFly)
-makeSlider(move, "Fly Speed", 20, 250, function() return S.flySpeed end, function(v) S.flySpeed = v end)
-makeToggle(move, "Noclip", "noclip", setNoclip)
-makeToggle(move, "Infinite Jump", "infJump", setInfJump)
-makeToggle(move, "Ctrl + Click TP", "ctrlTp", function(on)
-	S.toggles.ctrlTp = on
-end)
-addConn("ctrlTp", Mouse.Button1Down:Connect(function()
-	if not S.toggles.ctrlTp then return end
-	if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
-		tp(CFrame.new(Mouse.Hit.Position + Vector3.new(0, 3, 0)))
-	end
-end))
+end })
+makeToggle(move, { id = "fly", title = "Fly (WASD Space/Shift)", callback = setFly })
+makeSlider(move, { title = "Fly Speed", min = 20, max = 250, get = function() return S.flySpeed end, set = function(v) S.flySpeed = v end })
+makeToggle(move, { id = "noclip", title = "Noclip", callback = setNoclip })
+makeToggle(move, { id = "infJump", title = "Infinite Jump", callback = setInfJump })
+makeToggle(move, { id = "ctrlTp", title = "Ctrl + Click TP", callback = function(on) S.toggles.ctrlTp = on end })
 
 -- VISUALS
-makeSection(vis, "ESP")
-makeToggle(vis, "Player ESP (name / hp / cash / dist)", "esp", setESP)
-makeToggle(vis, "Fullbright", "fullbright", setFullbright)
+section(vis, "ESP")
+makeToggle(vis, { id = "esp", title = "Player ESP (name / hp / cash)", callback = setESP })
+makeToggle(vis, { id = "fullbright", title = "Fullbright", callback = setFullbright })
 
 -- TPS
-makeSection(tps, "CALI MAP")
+section(tps, "CALI MAP")
+makeButton(tps, {
+	title = "Hop to Voice Chat server",
+	tip = "Teleports you into Cali's VC-only place. Hub reloads after hop.",
+	callback = function()
+		pcall(function() TeleportService:Teleport(PLACE_VC, LP) end)
+	end,
+})
+makeButton(tps, {
+	title = "Hop to main map",
+	callback = function()
+		pcall(function() TeleportService:Teleport(PLACE_MAIN, LP) end)
+	end,
+})
 for _, row in ipairs(TPS) do
 	local name, pos = row[1], row[2]
-	makeButton(tps, name, function() tp(CFrame.new(pos + Vector3.new(0, 3, 0))) end)
+	makeButton(tps, { title = name, callback = function() tp(CFrame.new(pos + Vector3.new(0, 3, 0))) end })
 end
 
 -- PLAYERS
-makeSection(ply, "TARGET")
-local searchBox
-searchBox = makeInput(ply, "Name / display", function(text)
+section(ply, "TARGET")
+makeInput(ply, "Name / display", function(text)
 	text = tostring(text or ""):lower()
 	S.selected = nil
 	for _, p in ipairs(Players:GetPlayers()) do
@@ -1301,59 +1784,74 @@ searchBox = makeInput(ply, "Name / display", function(text)
 		end
 	end
 end)
-makeButton(ply, "TP to selected", function()
+makeButton(ply, { title = "TP to selected", callback = function()
 	local p = S.selected
 	if p and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
 		tp(p.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 3))
 	else
 		notify(HUB_NAME, "No player selected", 1.2)
 	end
-end)
-makeButton(ply, "Spectate selected", function()
+end })
+makeButton(ply, { title = "Spectate selected", callback = function()
 	local p = S.selected
 	if p and p.Character then
 		local h = p.Character:FindFirstChildOfClass("Humanoid")
 		if h then Camera.CameraSubject = h end
 	end
-end)
-makeButton(ply, "Unspectate", function()
+end })
+makeButton(ply, { title = "Unspectate", callback = function()
 	local h = hum()
 	if h then Camera.CameraSubject = h end
-end)
+end })
 
 -- MISC
-makeSection(misc, "SERVER")
-makeToggle(misc, "Anti AFK", "antiAfk", setAntiAfk)
-makeButton(misc, "Rejoin", function()
+section(misc, "SERVER")
+makeToggle(misc, { id = "antiAfk", title = "Anti AFK", callback = setAntiAfk })
+makeButton(misc, { title = "Rejoin", callback = function()
 	pcall(function() TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LP) end)
-end)
-makeButton(misc, "Server hop", function()
+end })
+makeButton(misc, { title = "Server hop", callback = function()
 	pcall(function() TeleportService:Teleport(game.PlaceId, LP) end)
-end)
-makeSection(misc, "CLEAN")
-makeButton(misc, "Unload all", function()
-	setCombatGod(false)
-	setAimbot(false)
-	setHitboxes(false)
-	setKillAura(false)
-	setNoclip(false)
-	setFly(false)
-	setInfJump(false)
-	setSpeedLoop(false)
-	setESP(false)
-	setFullbright(false)
-	setInstantPrompt(false)
-	setAntiAfk(false)
-	for k in pairs(S.toggles) do S.toggles[k] = false end
-	notify(HUB_NAME, "Unloaded", 1.4)
+end })
+section(misc, "CLEAN")
+makeButton(misc, {
+	title = "Unload all",
+	danger = true,
+	callback = function()
+		setCombatGod(false)
+		setAimbot(false)
+		setHitboxes(false)
+		setKillAura(false)
+		setNoclip(false)
+		setFly(false)
+		setInfJump(false)
+		setSpeedLoop(false)
+		setESP(false)
+		setFullbright(false)
+		setInstantPrompt(false)
+		setAntiAfk(false)
+		for k in pairs(S.toggles) do S.toggles[k] = false end
+		notify(HUB_NAME, "Unloaded", 1.4)
+	end,
+})
+
+switchTab("home")
+
+pcall(function()
+	Mouse.Button1Down:Connect(function()
+		if not S.toggles.ctrlTp then return end
+		if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
+			tp(CFrame.new(Mouse.Hit.Position + Vector3.new(0, 3, 0)))
+		end
+	end)
 end)
 
 UserInputService.InputBegan:Connect(function(input, gp)
 	if gp then return end
 	if input.KeyCode == Enum.KeyCode.RightShift then
-		screen.Enabled = not screen.Enabled
+		sg.Enabled = not sg.Enabled
 	end
 end)
 
-notify(HUB_NAME, "Loaded " .. BUILD .. "  ·  Combat God keeps you shooting", 3)
+notify(HUB_NAME, "Cali " .. (isVoiceServer() and "VC" or "main") .. "  ·  " .. BUILD, 3)
 print("[VOIDZ CALI] " .. BUILD .. "  -- hi im voidz")
