@@ -1,6 +1,6 @@
 --[[
   VOIDZ HUB — Cali Shootout
-  Build 2026-08-23-1.4.8  |  Key: VOIDZHUB  |  RightShift toggle
+  Build 2026-08-23-1.4.9  |  Key: VOIDZHUB  |  RightShift toggle
   Places: 12077443856 (main) + 16940099758 (Voice Chat)
 ]]
 
@@ -23,7 +23,8 @@ local Mouse = LP:GetMouse()
 local Camera = Workspace.CurrentCamera
 
 local HUB_NAME = "VOIDZ"
-local BUILD = "2026-08-23-1.4.8"
+local BUILD = "2026-08-23-1.4.9"
+print("[VOIDZ CALI] booting " .. BUILD)
 local ACCESS_KEY = "VOIDZHUB"
 local CALI_UNIVERSE = 4263576532
 local PLACE_MAIN = 12077443856
@@ -239,7 +240,15 @@ local function pickGuiParent()
 		return game:GetService("CoreGui")
 	end)
 	if ok and cg then return cg end
-	return LP:WaitForChild("PlayerGui")
+	return LP:WaitForChild("PlayerGui", 10) or LP:FindFirstChildOfClass("PlayerGui")
+end
+local function protectGui(g)
+	pcall(function()
+		if syn and syn.protect_gui then syn.protect_gui(g) end
+	end)
+	pcall(function()
+		if protect_gui then protect_gui(g) end
+	end)
 end
 
 pcall(function()
@@ -2232,7 +2241,9 @@ do
 	gui.ResetOnSpawn = false
 	gui.DisplayOrder = 200000
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	protectGui(gui)
 	gui.Parent = pickGuiParent()
+	print("[VOIDZ CALI] key UI parented to", gui.Parent and gui.Parent.Name)
 	local dim = Instance.new("Frame")
 	dim.Size = UDim2.fromScale(1, 1)
 	dim.BackgroundColor3 = C.black
@@ -2352,6 +2363,7 @@ sg.ResetOnSpawn = false
 sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 sg.IgnoreGuiInset = true
 sg.DisplayOrder = 120000
+protectGui(sg)
 sg.Parent = pickGuiParent()
 
 local MAIN_W, MAIN_H = 720, 500
@@ -2439,7 +2451,7 @@ verL.Font = Enum.Font.GothamMedium
 verL.TextSize = 9
 verL.TextColor3 = C.accent2
 verL.TextXAlignment = Enum.TextXAlignment.Left
-verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.4.8" or "CALI  ·  HUB  ·  v1.4.8"
+verL.Text = isVoiceServer() and "CALI  ·  VC  ·  v1.4.9" or "CALI  ·  HUB  ·  v1.4.9"
 verL.ZIndex = 7
 verL.Parent = header
 
@@ -2586,7 +2598,7 @@ footR.Parent = footer
 task.spawn(function()
 	while footer.Parent do
 		local tag = isVoiceServer() and "VC" or "main"
-		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.4.8"
+		footR.Text = #Players:GetPlayers() .. " online  ·  " .. tag .. "  ·  1.4.9"
 		task.wait(2)
 	end
 end)
