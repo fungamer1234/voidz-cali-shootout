@@ -6,6 +6,7 @@ local TeleportService = game:GetService("TeleportService")
 local HttpService = game:GetService("HttpService")
 local UserInputService = game:GetService("UserInputService")
 local StarterGui = game:GetService("StarterGui")
+local TweenService = game:GetService("TweenService")
 
 local LP = Players.LocalPlayer
 while not LP do
@@ -280,22 +281,22 @@ local function snipeName(name, status, jobBox, placeBox, gameLbl)
 
 		if ptype == 0 then
 			status.Text = name .. " is offline"
-			if gameLbl then gameLbl.Text = "Game: offline" end
+			if gameLbl then gameLbl.Text = "Game  ·  offline" end
 			return
 		end
 		if ptype == 1 then
 			status.Text = name .. " is on the website, not in a game"
-			if gameLbl then gameLbl.Text = "Game: Roblox website" end
+			if gameLbl then gameLbl.Text = "Game  ·  Roblox website" end
 			return
 		end
 		if ptype == 3 then
 			status.Text = name .. " is in Studio"
-			if gameLbl then gameLbl.Text = "Game: Roblox Studio" end
+			if gameLbl then gameLbl.Text = "Game  ·  Roblox Studio" end
 			return
 		end
 		if ptype ~= 2 or not placeId then
 			status.Text = name .. " is not in a game"
-			if gameLbl then gameLbl.Text = "Game: unknown" end
+			if gameLbl then gameLbl.Text = "Game  ·  unknown" end
 			return
 		end
 
@@ -305,7 +306,7 @@ local function snipeName(name, status, jobBox, placeBox, gameLbl)
 		end
 		gname = gname or ("Place " .. tostring(placeId))
 		if gameLbl then
-			gameLbl.Text = "Game: " .. gname
+			gameLbl.Text = "Game  ·  " .. gname
 		end
 		notify(name .. " is in " .. gname)
 
@@ -323,240 +324,650 @@ local function snipeName(name, status, jobBox, placeBox, gameLbl)
 	end)
 end
 
-local sg = Instance.new("ScreenGui")
-sg.Name = "VOIDZ_SNIPE"
-sg.ResetOnSpawn = false
-sg.IgnoreGuiInset = true
-sg.DisplayOrder = 999999
-sg.Parent = pg
+local function buildSnipeUi()
+	local C = {
+		bg = Color3.fromRGB(12, 8, 24),
+		bg2 = Color3.fromRGB(22, 14, 42),
+		card = Color3.fromRGB(36, 26, 62),
+		input = Color3.fromRGB(28, 20, 52),
+		stroke = Color3.fromRGB(168, 108, 255),
+		strokeSoft = Color3.fromRGB(92, 68, 140),
+		accent = Color3.fromRGB(186, 132, 255),
+		accent2 = Color3.fromRGB(230, 196, 255),
+		muted = Color3.fromRGB(186, 176, 214),
+		text = Color3.fromRGB(255, 255, 255),
+		good = Color3.fromRGB(72, 196, 148),
+		danger = Color3.fromRGB(255, 150, 170),
+		warn = Color3.fromRGB(255, 214, 130),
+	}
 
-local card = Instance.new("Frame")
-card.Size = UDim2.fromOffset(340, 348)
-card.Position = UDim2.new(0.5, -170, 0.14, 0)
-card.BackgroundColor3 = Color3.fromRGB(18, 12, 32)
-card.BorderSizePixel = 0
-card.Active = true
-card.Parent = sg
-do
-	local c = Instance.new("UICorner")
-	c.CornerRadius = UDim.new(0, 12)
-	c.Parent = card
-	local s = Instance.new("UIStroke")
-	s.Color = Color3.fromRGB(168, 108, 255)
-	s.Thickness = 1.4
-	s.Parent = card
-end
-
-local function lab(text, y)
-	local l = Instance.new("TextLabel")
-	l.BackgroundTransparency = 1
-	l.Size = UDim2.new(1, -24, 0, 16)
-	l.Position = UDim2.fromOffset(12, y)
-	l.Font = Enum.Font.SourceSansBold
-	l.TextSize = 13
-	l.TextColor3 = Color3.fromRGB(210, 196, 255)
-	l.TextXAlignment = Enum.TextXAlignment.Left
-	l.Text = text
-	l.Parent = card
-	return l
-end
-
-local function boxAt(y, placeholder, defaultText)
-	local b = Instance.new("TextBox")
-	b.Size = UDim2.new(1, -24, 0, 28)
-	b.Position = UDim2.fromOffset(12, y)
-	b.BackgroundColor3 = Color3.fromRGB(36, 26, 62)
-	b.Text = defaultText or ""
-	b.PlaceholderText = placeholder
-	b.PlaceholderColor3 = Color3.fromRGB(170, 160, 190)
-	b.TextColor3 = Color3.fromRGB(255, 255, 255)
-	b.Font = Enum.Font.SourceSans
-	b.TextSize = 14
-	b.ClearTextOnFocus = false
-	b.TextXAlignment = Enum.TextXAlignment.Left
-	b.Parent = card
-	local c = Instance.new("UICorner")
-	c.CornerRadius = UDim.new(0, 6)
-	c.Parent = b
-	return b
-end
-
-local title = Instance.new("TextLabel")
-title.BackgroundTransparency = 1
-title.Size = UDim2.new(1, -40, 0, 24)
-title.Position = UDim2.fromOffset(12, 6)
-title.Font = Enum.Font.SourceSansBold
-title.TextSize = 18
-title.TextColor3 = Color3.fromRGB(255, 255, 255)
-title.TextXAlignment = Enum.TextXAlignment.Left
-title.Text = "VOIDZ SNIPE"
-title.Parent = card
-
-local close = Instance.new("TextButton")
-close.Size = UDim2.fromOffset(22, 22)
-close.Position = UDim2.new(1, -30, 0, 6)
-close.BackgroundColor3 = Color3.fromRGB(50, 20, 40)
-close.Text = "X"
-close.TextColor3 = Color3.fromRGB(255, 180, 190)
-close.Font = Enum.Font.SourceSansBold
-close.TextSize = 14
-close.Parent = card
-do
-	local c = Instance.new("UICorner")
-	c.CornerRadius = UDim.new(0, 6)
-	c.Parent = close
-end
-close.MouseButton1Click:Connect(function()
-	sg:Destroy()
-end)
-
-lab("Username", 32)
-local nameBox = boxAt(48, "Roblox username", "")
-
-local goName = Instance.new("TextButton")
-goName.Size = UDim2.new(1, -24, 0, 30)
-goName.Position = UDim2.fromOffset(12, 80)
-goName.BackgroundColor3 = Color3.fromRGB(150, 90, 255)
-goName.Text = "Snipe username"
-goName.TextColor3 = Color3.fromRGB(255, 255, 255)
-goName.Font = Enum.Font.SourceSansBold
-goName.TextSize = 15
-goName.Parent = card
-do
-	local c = Instance.new("UICorner")
-	c.CornerRadius = UDim.new(0, 8)
-	c.Parent = goName
-end
-
-local gameLbl = Instance.new("TextLabel")
-gameLbl.BackgroundTransparency = 1
-gameLbl.Size = UDim2.new(1, -24, 0, 18)
-gameLbl.Position = UDim2.fromOffset(12, 114)
-gameLbl.Font = Enum.Font.SourceSansBold
-gameLbl.TextSize = 14
-gameLbl.TextColor3 = Color3.fromRGB(255, 220, 140)
-gameLbl.TextXAlignment = Enum.TextXAlignment.Left
-gameLbl.Text = "Game: —"
-gameLbl.Parent = card
-
-lab("PlaceId  /  JobId  (filled after snipe, or paste)", 134)
-local placeBox = boxAt(150, "PlaceId", tostring(game.PlaceId))
-local jobBox = boxAt(182, "JobId (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)", "")
-
-local goJob = Instance.new("TextButton")
-goJob.Size = UDim2.new(0.48, -8, 0, 30)
-goJob.Position = UDim2.fromOffset(12, 216)
-goJob.BackgroundColor3 = Color3.fromRGB(90, 70, 180)
-goJob.Text = "Join JobId"
-goJob.TextColor3 = Color3.fromRGB(255, 255, 255)
-goJob.Font = Enum.Font.SourceSansBold
-goJob.TextSize = 14
-goJob.Parent = card
-do
-	local c = Instance.new("UICorner")
-	c.CornerRadius = UDim.new(0, 8)
-	c.Parent = goJob
-end
-
-local copyJob = Instance.new("TextButton")
-copyJob.Size = UDim2.new(0.48, -8, 0, 30)
-copyJob.Position = UDim2.new(0.52, 4, 0, 216)
-copyJob.BackgroundColor3 = Color3.fromRGB(50, 40, 90)
-copyJob.Text = "Copy JobId"
-copyJob.TextColor3 = Color3.fromRGB(230, 210, 255)
-copyJob.Font = Enum.Font.SourceSansBold
-copyJob.TextSize = 14
-copyJob.Parent = card
-do
-	local c = Instance.new("UICorner")
-	c.CornerRadius = UDim.new(0, 8)
-	c.Parent = copyJob
-end
-
-local openBtn = Instance.new("TextButton")
-openBtn.Size = UDim2.new(1, -24, 0, 30)
-openBtn.Position = UDim2.fromOffset(12, 250)
-openBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 120)
-openBtn.Text = "OPEN IN ROBLOX (bypasses 773)"
-openBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-openBtn.Font = Enum.Font.SourceSansBold
-openBtn.TextSize = 14
-openBtn.Parent = card
-do
-	local c = Instance.new("UICorner")
-	c.CornerRadius = UDim.new(0, 8)
-	c.Parent = openBtn
-end
-
-local status = Instance.new("TextLabel")
-status.BackgroundTransparency = 1
-status.Size = UDim2.new(1, -24, 0, 36)
-status.Position = UDim2.fromOffset(12, 286)
-status.Font = Enum.Font.SourceSans
-status.TextSize = 13
-status.TextColor3 = Color3.fromRGB(210, 196, 255)
-status.TextXAlignment = Enum.TextXAlignment.Left
-status.TextYAlignment = Enum.TextYAlignment.Top
-status.TextWrapped = true
-status.Text = "Snipe → leaves this game → Roblox joins their server. RightShift hide."
-status.Parent = card
-
-goName.MouseButton1Click:Connect(function()
-	snipeName(nameBox.Text, status, jobBox, placeBox, gameLbl)
-end)
-nameBox.FocusLost:Connect(function(enter)
-	if enter then
-		snipeName(nameBox.Text, status, jobBox, placeBox, gameLbl)
+	local function mix3(a, b, t)
+		t = tonumber(t) or 0.5
+		return Color3.new(a.R + (b.R - a.R) * t, a.G + (b.G - a.G) * t, a.B + (b.B - a.B) * t)
 	end
-end)
-goJob.MouseButton1Click:Connect(function()
-	joinJob(placeBox.Text, jobBox.Text, status)
-end)
-copyJob.MouseButton1Click:Connect(function()
-	if jobBox.Text ~= "" then
-		copyText(jobBox.Text)
-		status.Text = "JobId copied"
+
+	local function tw(obj, props, t, style, dir)
+		local ti = TweenInfo.new(t or 0.22, style or Enum.EasingStyle.Quart, dir or Enum.EasingDirection.Out)
+		local tws = TweenService:Create(obj, ti, props)
+		tws:Play()
+		return tws
 	end
-end)
-openBtn.MouseButton1Click:Connect(function()
-	if not looksLikeJobId(jobBox.Text) then
-		status.Text = "Snipe or paste a JobId first"
-		return
+
+	local function loopTw(obj, props, t, style)
+		local ti = TweenInfo.new(t or 1.4, style or Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true)
+		local tws = TweenService:Create(obj, ti, props)
+		tws:Play()
+		return tws
 	end
-	nativeLaunch(placeBox.Text, jobBox.Text)
-	status.Text = "Leaving this game so Roblox can join that JobId..."
+
+	local function corner(obj, r)
+		local c = Instance.new("UICorner")
+		c.CornerRadius = UDim.new(0, r or 10)
+		c.Parent = obj
+		return c
+	end
+
+	local function stroke(obj, col, th, tr)
+		local s = Instance.new("UIStroke")
+		s.Color = col or C.stroke
+		s.Thickness = th or 1
+		s.Transparency = tr ~= nil and tr or 0.35
+		s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		s.Parent = obj
+		return s
+	end
+
+	local function pad(obj, l, r)
+		local p = Instance.new("UIPadding")
+		p.PaddingLeft = UDim.new(0, l or 12)
+		p.PaddingRight = UDim.new(0, r or l or 12)
+		p.Parent = obj
+		return p
+	end
+
+	local function shineSweep(btn)
+		btn.ClipsDescendants = true
+		local gloss = Instance.new("Frame")
+		gloss.Name = "Shine"
+		gloss.BackgroundColor3 = Color3.new(1, 1, 1)
+		gloss.BackgroundTransparency = 0.84
+		gloss.BorderSizePixel = 0
+		gloss.Size = UDim2.new(0, 42, 1.4, 0)
+		gloss.Position = UDim2.new(0, -48, 0, -6)
+		gloss.Rotation = 18
+		gloss.ZIndex = (btn.ZIndex or 1) + 1
+		gloss.Parent = btn
+		local g = Instance.new("UIGradient")
+		g.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 1),
+			NumberSequenceKeypoint.new(0.5, 0.15),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		g.Parent = gloss
+		local function run()
+			if not gloss.Parent then
+				return
+			end
+			gloss.Position = UDim2.new(0, -56, 0, -6)
+			local twn = tw(gloss, { Position = UDim2.new(1, 20, 0, -6) }, 0.85, Enum.EasingStyle.Quad)
+			twn.Completed:Connect(function()
+				task.delay(2.4, run)
+			end)
+		end
+		task.delay(0.7, run)
+	end
+
+	local function styleBtn(btn, col)
+		local sc = Instance.new("UIScale")
+		sc.Scale = 1
+		sc.Parent = btn
+		local st = stroke(btn, mix3(col, C.accent2, 0.35), 1, 0.5)
+		local idle = col
+		local hover = mix3(col, Color3.new(1, 1, 1), 0.14)
+		btn.MouseEnter:Connect(function()
+			tw(btn, { BackgroundColor3 = hover }, 0.16)
+			tw(sc, { Scale = 1.03 }, 0.2, Enum.EasingStyle.Back)
+			tw(st, { Transparency = 0.18 }, 0.16)
+		end)
+		btn.MouseLeave:Connect(function()
+			tw(btn, { BackgroundColor3 = idle }, 0.2)
+			tw(sc, { Scale = 1 }, 0.18)
+			tw(st, { Transparency = 0.5 }, 0.2)
+		end)
+		btn.MouseButton1Down:Connect(function()
+			tw(sc, { Scale = 0.95 }, 0.07, Enum.EasingStyle.Quad)
+		end)
+		btn.MouseButton1Up:Connect(function()
+			tw(sc, { Scale = 1.03 }, 0.16, Enum.EasingStyle.Back)
+		end)
+	end
+
+	local function styleBox(box)
+		local st = stroke(box, C.strokeSoft, 1, 0.55)
+		box.Focused:Connect(function()
+			tw(st, { Transparency = 0.08, Color = C.accent, Thickness = 1.4 }, 0.18)
+			tw(box, { BackgroundColor3 = mix3(C.input, C.accent, 0.12) }, 0.18)
+		end)
+		box.FocusLost:Connect(function()
+			tw(st, { Transparency = 0.55, Color = C.strokeSoft, Thickness = 1 }, 0.22)
+			tw(box, { BackgroundColor3 = C.input }, 0.22)
+		end)
+	end
+
+	local sg = Instance.new("ScreenGui")
+	sg.Name = "VOIDZ_SNIPE"
+	sg.ResetOnSpawn = false
+	sg.IgnoreGuiInset = true
+	sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	sg.DisplayOrder = 999999
+	sg.Parent = pg
+
+	local dim = Instance.new("Frame")
+	dim.Size = UDim2.fromScale(1, 1)
+	dim.BackgroundColor3 = Color3.new(0, 0, 0)
+	dim.BackgroundTransparency = 1
+	dim.BorderSizePixel = 0
+	dim.ZIndex = 1
+	dim.Parent = sg
+
+	local shadow = Instance.new("Frame")
+	shadow.AnchorPoint = Vector2.new(0.5, 0.5)
+	shadow.Size = UDim2.fromOffset(392, 438)
+	shadow.Position = UDim2.new(0.5, 0, 0.48, 18)
+	shadow.BackgroundColor3 = Color3.new(0, 0, 0)
+	shadow.BackgroundTransparency = 1
+	shadow.BorderSizePixel = 0
+	shadow.ZIndex = 2
+	shadow.Parent = sg
+	corner(shadow, 20)
+
+	local card = Instance.new("Frame")
+	card.AnchorPoint = Vector2.new(0.5, 0.5)
+	card.Size = UDim2.fromOffset(372, 420)
+	card.Position = UDim2.new(0.5, 0, 0.48, 28)
+	card.BackgroundColor3 = C.bg
+	card.BackgroundTransparency = 1
+	card.BorderSizePixel = 0
+	card.Active = true
+	card.ClipsDescendants = true
+	card.ZIndex = 3
+	card.Parent = sg
+	corner(card, 16)
+	local cardStroke = stroke(card, C.accent, 1.3, 1)
+	do
+		local g = Instance.new("UIGradient")
+		g.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, mix3(C.accent, C.bg2, 0.42)),
+			ColorSequenceKeypoint.new(0.5, C.bg),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(10, 6, 20)),
+		})
+		g.Rotation = 118
+		g.Parent = card
+	end
+
+	local cardScale = Instance.new("UIScale")
+	cardScale.Scale = 0.84
+	cardScale.Parent = card
+
+	local header = Instance.new("Frame")
+	header.Size = UDim2.new(1, 0, 0, 54)
+	header.BackgroundColor3 = C.bg2
+	header.BackgroundTransparency = 0.15
+	header.BorderSizePixel = 0
+	header.ZIndex = 4
+	header.Parent = card
+	do
+		local g = Instance.new("UIGradient")
+		g.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, mix3(C.accent, C.bg2, 0.38)),
+			ColorSequenceKeypoint.new(1, C.bg2),
+		})
+		g.Rotation = 8
+		g.Parent = header
+	end
+
+	local topBar = Instance.new("Frame")
+	topBar.Size = UDim2.new(0, 0, 0, 2)
+	topBar.BackgroundColor3 = Color3.new(1, 1, 1)
+	topBar.BorderSizePixel = 0
+	topBar.ZIndex = 6
+	topBar.Parent = header
+	local topGrad = Instance.new("UIGradient")
+	topGrad.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, C.accent),
+		ColorSequenceKeypoint.new(0.5, C.accent2),
+		ColorSequenceKeypoint.new(1, C.accent),
+	})
+	topGrad.Parent = topBar
+	TweenService:Create(
+		topGrad,
+		TweenInfo.new(7, Enum.EasingStyle.Linear, Enum.EasingDirection.Out, -1, false),
+		{ Rotation = 360 }
+	):Play()
+
+	local headerLine = Instance.new("Frame")
+	headerLine.Size = UDim2.new(1, 0, 0, 1)
+	headerLine.Position = UDim2.new(0, 0, 1, -1)
+	headerLine.BackgroundColor3 = C.strokeSoft
+	headerLine.BackgroundTransparency = 0.45
+	headerLine.BorderSizePixel = 0
+	headerLine.ZIndex = 6
+	headerLine.Parent = header
+
+	local mark = Instance.new("Frame")
+	mark.Size = UDim2.fromOffset(30, 30)
+	mark.Position = UDim2.fromOffset(14, 12)
+	mark.BackgroundColor3 = C.accent
+	mark.BorderSizePixel = 0
+	mark.ZIndex = 7
+	mark.Parent = header
+	corner(mark, 9)
+	stroke(mark, C.accent2, 1, 0.42)
+	local markScale = Instance.new("UIScale")
+	markScale.Scale = 1
+	markScale.Parent = mark
 	task.delay(0.6, function()
-		pcall(function()
-			game:Shutdown()
+		if markScale.Parent then
+			loopTw(markScale, { Scale = 1.07 }, 1.7)
+		end
+	end)
+	local mv = Instance.new("TextLabel")
+	mv.BackgroundTransparency = 1
+	mv.Size = UDim2.fromScale(1, 1)
+	mv.Font = Enum.Font.GothamBlack
+	mv.TextSize = 15
+	mv.TextColor3 = Color3.new(1, 1, 1)
+	mv.Text = "V"
+	mv.ZIndex = 8
+	mv.Parent = mark
+
+	local title = Instance.new("TextLabel")
+	title.BackgroundTransparency = 1
+	title.Size = UDim2.new(1, -90, 0, 16)
+	title.Position = UDim2.fromOffset(52, 10)
+	title.Font = Enum.Font.GothamBlack
+	title.TextSize = 14
+	title.TextColor3 = C.text
+	title.TextXAlignment = Enum.TextXAlignment.Left
+	title.Text = "VOIDZ"
+	title.ZIndex = 7
+	title.Parent = header
+
+	local sub = Instance.new("TextLabel")
+	sub.BackgroundTransparency = 1
+	sub.Size = UDim2.new(1, -90, 0, 13)
+	sub.Position = UDim2.fromOffset(52, 28)
+	sub.Font = Enum.Font.GothamMedium
+	sub.TextSize = 10
+	sub.TextColor3 = C.accent2
+	sub.TextXAlignment = Enum.TextXAlignment.Left
+	sub.Text = "SNIPE  ·  RightShift hide"
+	sub.ZIndex = 7
+	sub.Parent = header
+
+	local close = Instance.new("TextButton")
+	close.Size = UDim2.fromOffset(24, 24)
+	close.Position = UDim2.new(1, -38, 0, 15)
+	close.BackgroundColor3 = Color3.fromRGB(56, 24, 42)
+	close.Text = "×"
+	close.TextColor3 = C.danger
+	close.Font = Enum.Font.GothamBold
+	close.TextSize = 16
+	close.AutoButtonColor = false
+	close.ZIndex = 8
+	close.Parent = header
+	corner(close, 7)
+	styleBtn(close, Color3.fromRGB(56, 24, 42))
+
+	local function sectionLabel(text, y)
+		local l = Instance.new("TextLabel")
+		l.BackgroundTransparency = 1
+		l.Size = UDim2.new(1, -36, 0, 12)
+		l.Position = UDim2.fromOffset(18, y)
+		l.Font = Enum.Font.GothamBold
+		l.TextSize = 10
+		l.TextColor3 = C.muted
+		l.TextXAlignment = Enum.TextXAlignment.Left
+		l.TextTransparency = 1
+		l.Text = string.upper(text)
+		l.ZIndex = 4
+		l.Parent = card
+		return l
+	end
+
+	local function makeBox(y, placeholder, defaultText)
+		local b = Instance.new("TextBox")
+		b.Size = UDim2.new(1, -36, 0, 34)
+		b.Position = UDim2.fromOffset(18, y)
+		b.BackgroundColor3 = C.input
+		b.BackgroundTransparency = 1
+		b.Text = defaultText or ""
+		b.PlaceholderText = placeholder
+		b.PlaceholderColor3 = Color3.fromRGB(130, 118, 158)
+		b.TextColor3 = C.text
+		b.TextTransparency = 1
+		b.Font = Enum.Font.GothamMedium
+		b.TextSize = 13
+		b.ClearTextOnFocus = false
+		b.TextXAlignment = Enum.TextXAlignment.Left
+		b.BorderSizePixel = 0
+		b.ZIndex = 4
+		b.Parent = card
+		corner(b, 9)
+		pad(b, 12)
+		styleBox(b)
+		return b
+	end
+
+	local function makeBtn(text, y, h, col, x, w)
+		local b = Instance.new("TextButton")
+		b.Size = UDim2.fromOffset(w or 336, h or 34)
+		b.Position = UDim2.fromOffset(x or 18, y)
+		b.BackgroundColor3 = col
+		b.BackgroundTransparency = 1
+		b.Text = text
+		b.TextColor3 = C.text
+		b.TextTransparency = 1
+		b.Font = Enum.Font.GothamBold
+		b.TextSize = 13
+		b.AutoButtonColor = false
+		b.BorderSizePixel = 0
+		b.ZIndex = 4
+		b.Parent = card
+		corner(b, 9)
+		styleBtn(b, col)
+		return b
+	end
+
+	local labTarget = sectionLabel("Target", 64)
+	local nameBox = makeBox(80, "Roblox username", "")
+	local goName = makeBtn("Snipe user", 122, 36, C.accent)
+	shineSweep(goName)
+
+	local gameChip = Instance.new("Frame")
+	gameChip.Size = UDim2.new(1, -36, 0, 28)
+	gameChip.Position = UDim2.fromOffset(18, 166)
+	gameChip.BackgroundColor3 = Color3.fromRGB(40, 28, 64)
+	gameChip.BackgroundTransparency = 1
+	gameChip.BorderSizePixel = 0
+	gameChip.ZIndex = 4
+	gameChip.Parent = card
+	corner(gameChip, 8)
+	stroke(gameChip, C.strokeSoft, 1, 0.55)
+	local chipDot = Instance.new("Frame")
+	chipDot.Size = UDim2.fromOffset(7, 7)
+	chipDot.Position = UDim2.fromOffset(10, 11)
+	chipDot.BackgroundColor3 = C.warn
+	chipDot.BackgroundTransparency = 1
+	chipDot.BorderSizePixel = 0
+	chipDot.ZIndex = 5
+	chipDot.Parent = gameChip
+	corner(chipDot, 4)
+	local gameLbl = Instance.new("TextLabel")
+	gameLbl.BackgroundTransparency = 1
+	gameLbl.Size = UDim2.new(1, -28, 1, 0)
+	gameLbl.Position = UDim2.fromOffset(22, 0)
+	gameLbl.Font = Enum.Font.GothamBold
+	gameLbl.TextSize = 11
+	gameLbl.TextColor3 = C.warn
+	gameLbl.TextTransparency = 1
+	gameLbl.TextXAlignment = Enum.TextXAlignment.Left
+	gameLbl.Text = "Game  ·  waiting"
+	pcall(function()
+		gameLbl.TextTruncate = Enum.TextTruncate.AtEnd
+	end)
+	gameLbl.ZIndex = 5
+	gameLbl.Parent = gameChip
+
+	local labServer = sectionLabel("Server", 204)
+	local placeBox = makeBox(220, "PlaceId", tostring(game.PlaceId))
+	local jobBox = makeBox(260, "JobId", "")
+
+	local goJob = makeBtn("Join JobId", 302, 32, Color3.fromRGB(92, 68, 168), 18, 160)
+	local copyJob = makeBtn("Copy JobId", 302, 32, Color3.fromRGB(48, 36, 82), 194, 160)
+	local openBtn = makeBtn("Open in Roblox", 342, 36, C.good)
+	shineSweep(openBtn)
+
+	local statusBar = Instance.new("Frame")
+	statusBar.Size = UDim2.new(1, 0, 0, 0)
+	statusBar.Position = UDim2.new(0, 0, 1, -38)
+	statusBar.BackgroundColor3 = Color3.fromRGB(16, 10, 30)
+	statusBar.BorderSizePixel = 0
+	statusBar.ZIndex = 5
+	statusBar.Parent = card
+	local live = Instance.new("Frame")
+	live.Size = UDim2.fromOffset(6, 6)
+	live.Position = UDim2.fromOffset(16, 16)
+	live.BackgroundColor3 = C.accent
+	live.BackgroundTransparency = 1
+	live.BorderSizePixel = 0
+	live.ZIndex = 6
+	live.Parent = statusBar
+	corner(live, 3)
+	local status = Instance.new("TextLabel")
+	status.BackgroundTransparency = 1
+	status.Size = UDim2.new(1, -40, 1, 0)
+	status.Position = UDim2.fromOffset(28, 0)
+	status.Font = Enum.Font.Gotham
+	status.TextSize = 11
+	status.TextColor3 = C.muted
+	status.TextXAlignment = Enum.TextXAlignment.Left
+	status.Text = "Snipe a user, then Roblox hops you in."
+	pcall(function()
+		status.TextTruncate = Enum.TextTruncate.AtEnd
+	end)
+	status.ZIndex = 6
+	status.Parent = statusBar
+
+	local function setStatus(msg)
+		tw(status, { TextTransparency = 1 }, 0.08)
+		task.delay(0.08, function()
+			if not status.Parent then
+				return
+			end
+			status.Text = tostring(msg or "")
+			tw(status, { TextTransparency = 0 }, 0.2)
+		end)
+	end
+
+	local function pulseChip()
+		tw(gameChip, { BackgroundColor3 = Color3.fromRGB(78, 52, 118) }, 0.1)
+		task.delay(0.12, function()
+			if gameChip.Parent then
+				tw(gameChip, { BackgroundColor3 = Color3.fromRGB(40, 28, 64) }, 0.32)
+			end
+		end)
+	end
+
+	local function setGameText(msg)
+		tw(gameLbl, { TextTransparency = 1 }, 0.08)
+		pulseChip()
+		task.delay(0.08, function()
+			if not gameLbl.Parent then
+				return
+			end
+			gameLbl.Text = tostring(msg or "")
+			tw(gameLbl, { TextTransparency = 0 }, 0.22)
+		end)
+	end
+
+	local function bindText(label, onSet)
+		return setmetatable({}, {
+			__index = function(_, k)
+				return label[k]
+			end,
+			__newindex = function(_, k, v)
+				if k == "Text" then
+					onSet(v)
+				else
+					label[k] = v
+				end
+			end,
+		})
+	end
+
+	local statusRef = bindText(status, setStatus)
+	local gameRef = bindText(gameLbl, setGameText)
+
+	local function reveal(obj, delay, bgTo, txtTo)
+		task.delay(delay, function()
+			if not obj.Parent then
+				return
+			end
+			local props = {}
+			if bgTo ~= nil then
+				props.BackgroundTransparency = bgTo
+			end
+			if txtTo ~= nil then
+				props.TextTransparency = txtTo
+			end
+			tw(obj, props, 0.32, Enum.EasingStyle.Quart)
+		end)
+	end
+
+	-- entrance
+	tw(dim, { BackgroundTransparency = 0.52 }, 0.38)
+	tw(shadow, { BackgroundTransparency = 0.62, Position = UDim2.new(0.5, 0, 0.48, 10) }, 0.42, Enum.EasingStyle.Quart)
+	tw(card, { BackgroundTransparency = 0, Position = UDim2.new(0.5, 0, 0.48, 0) }, 0.48, Enum.EasingStyle.Back)
+	tw(cardScale, { Scale = 1 }, 0.5, Enum.EasingStyle.Back)
+	tw(cardStroke, { Transparency = 0.28 }, 0.45)
+	task.delay(0.1, function()
+		tw(topBar, { Size = UDim2.new(1, 0, 0, 2) }, 0.5, Enum.EasingStyle.Quart)
+		tw(statusBar, { Size = UDim2.new(1, 0, 0, 38) }, 0.38, Enum.EasingStyle.Quart)
+	end)
+	reveal(labTarget, 0.16, nil, 0)
+	reveal(nameBox, 0.2, 0, 0)
+	reveal(goName, 0.26, 0, 0)
+	reveal(gameChip, 0.3, 0, nil)
+	reveal(chipDot, 0.34, 0, nil)
+	reveal(gameLbl, 0.34, nil, 0)
+	reveal(labServer, 0.36, nil, 0)
+	reveal(placeBox, 0.4, 0, 0)
+	reveal(jobBox, 0.44, 0, 0)
+	reveal(goJob, 0.48, 0, 0)
+	reveal(copyJob, 0.5, 0, 0)
+	reveal(openBtn, 0.54, 0, 0)
+	reveal(live, 0.42, 0, nil)
+	task.delay(0.7, function()
+		if chipDot.Parent then
+			loopTw(chipDot, { BackgroundTransparency = 0.4 }, 1.15)
+		end
+		if live.Parent then
+			loopTw(live, { BackgroundTransparency = 0.5 }, 1.05)
+		end
+	end)
+
+	local animGen = 0
+	local function hidePanel(destroy)
+		animGen = animGen + 1
+		local gen = animGen
+		tw(dim, { BackgroundTransparency = 1 }, 0.2)
+		tw(shadow, { BackgroundTransparency = 1, Position = UDim2.new(0.5, 0, 0.5, 14) }, 0.2)
+		tw(cardScale, { Scale = 0.9 }, 0.2, Enum.EasingStyle.Quad)
+		tw(card, { BackgroundTransparency = 1, Position = UDim2.new(0.5, 0, 0.52, 0) }, 0.22)
+		tw(cardStroke, { Transparency = 1 }, 0.18)
+		task.delay(0.22, function()
+			if gen ~= animGen then
+				return
+			end
+			if destroy then
+				if sg then
+					sg:Destroy()
+				end
+			else
+				sg.Enabled = false
+			end
+		end)
+	end
+
+	local function showPanel()
+		animGen = animGen + 1
+		sg.Enabled = true
+		cardScale.Scale = 0.92
+		dim.BackgroundTransparency = 1
+		card.BackgroundTransparency = 0.2
+		card.Position = UDim2.new(0.5, 0, 0.5, 12)
+		shadow.BackgroundTransparency = 1
+		tw(dim, { BackgroundTransparency = 0.52 }, 0.24)
+		tw(shadow, { BackgroundTransparency = 0.62, Position = UDim2.new(0.5, 0, 0.48, 10) }, 0.28)
+		tw(card, { BackgroundTransparency = 0, Position = UDim2.new(0.5, 0, 0.48, 0) }, 0.32, Enum.EasingStyle.Back)
+		tw(cardScale, { Scale = 1 }, 0.34, Enum.EasingStyle.Back)
+		tw(cardStroke, { Transparency = 0.28 }, 0.28)
+	end
+
+	close.MouseButton1Click:Connect(function()
+		hidePanel(true)
+	end)
+
+	goName.MouseButton1Click:Connect(function()
+		pulseChip()
+		snipeName(nameBox.Text, statusRef, jobBox, placeBox, gameRef)
+	end)
+	nameBox.FocusLost:Connect(function(enter)
+		if enter then
+			pulseChip()
+			snipeName(nameBox.Text, statusRef, jobBox, placeBox, gameRef)
+		end
+	end)
+	goJob.MouseButton1Click:Connect(function()
+		joinJob(placeBox.Text, jobBox.Text, statusRef)
+	end)
+	copyJob.MouseButton1Click:Connect(function()
+		if jobBox.Text ~= "" then
+			copyText(jobBox.Text)
+			setStatus("JobId copied")
+		end
+	end)
+	openBtn.MouseButton1Click:Connect(function()
+		if not looksLikeJobId(jobBox.Text) then
+			setStatus("Snipe or paste a JobId first")
+			return
+		end
+		nativeLaunch(placeBox.Text, jobBox.Text)
+		setStatus("Leaving so Roblox can join that server...")
+		task.delay(0.6, function()
+			pcall(function()
+				game:Shutdown()
+			end)
 		end)
 	end)
-end)
 
-local dragging, startIn, startPos
-card.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 then
-		dragging = true
-		startIn = input.Position
-		startPos = card.Position
-	end
-end)
-UserInputService.InputEnded:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 then
-		dragging = false
-	end
-end)
-UserInputService.InputChanged:Connect(function(input)
-	if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-		local d = input.Position - startIn
-		card.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
-	end
-end)
-UserInputService.InputBegan:Connect(function(input, gp)
-	if gp then return end
-	if input.KeyCode == Enum.KeyCode.RightShift then
-		sg.Enabled = not sg.Enabled
-	end
-end)
+	local dragging, startIn, startPos, startShadow
+	header.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = true
+			startIn = input.Position
+			startPos = card.Position
+			startShadow = shadow.Position
+		end
+	end)
+	UserInputService.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = false
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(input)
+		if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+			local d = input.Position - startIn
+			card.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+			shadow.Position = UDim2.new(startShadow.X.Scale, startShadow.X.Offset + d.X, startShadow.Y.Scale, startShadow.Y.Offset + d.Y)
+		end
+	end)
+	UserInputService.InputBegan:Connect(function(input, gp)
+		if gp then
+			return
+		end
+		if input.KeyCode == Enum.KeyCode.RightShift then
+			if sg.Enabled then
+				hidePanel(false)
+			else
+				showPanel()
+			end
+		end
+	end)
 
-notify("Snipe ready — username or JobId")
-print("[VOIDZ SNIPE] ready")
+	notify("Snipe ready")
+	print("[VOIDZ SNIPE] ready")
+end
+
+buildSnipeUi()
