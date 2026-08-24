@@ -20,6 +20,16 @@ The hub follows you onto the VC place (`queue_on_teleport`). TPs tab can hop mai
 
 GitHub: https://github.com/fungamer1234/voidz-cali-shootout
 
+## Player snipe (separate script)
+
+Not part of the Cali hub. Type any Roblox username and it joins their server.
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/fungamer1234/voidz-cali-shootout/main/VOIDZ_SNIPE.lua"))()
+```
+
+RightShift hides it. If they’re already in your server it TPs you to them. Hidden join-privacy cannot be sniped.
+
 ## Combat God
 
 Removed. Cali damage is server-sided; every client god we tried either did nothing, froze the camera, or got you kicked (267). Use Anti Ragdoll and farms/TPs instead.
