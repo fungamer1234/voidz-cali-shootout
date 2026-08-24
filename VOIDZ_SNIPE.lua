@@ -107,32 +107,92 @@ local function joinUser(name, status)
 		end
 
 		local ptype = tonumber(pres.userPresenceType) or 0
-		local placeId = pres.placeId or pres.rootPlaceId
-		local jobId = pres.gameId or pres.GameId
+		local placeId = tonumber(pres.placeId or pres.rootPlaceId)
+		local rootPlaceId = tonumber(pres.rootPlaceId or pres.placeId)
+		local jobId = pres.gameId or pres.GameId or pres.gameInstanceId or pres.instanceId
+		if type(jobId) == "string" and (jobId == "" or jobId == "null") then
+			jobId = nil
+		end
+
+		-- Official JobId (works when Roblox lets you follow them)
+		pcall(function()
+			local _ok, _err, p2, j2 = TeleportService:GetPlayerPlaceInstanceAsync(uid)
+			if p2 then
+				placeId = tonumber(p2) or placeId
+			end
+			if type(j2) == "string" and j2 ~= "" and j2 ~= "null" then
+				jobId = j2
+			end
+		end)
+
 		if ptype ~= 2 or not placeId then
 			status.Text = name .. " is not in a game"
 			notify(name .. " is not in a game")
 			return
 		end
-		if not jobId or jobId == "" or tostring(jobId) == "null" then
+		if not jobId then
 			status.Text = "Server hidden (join privacy)"
 			notify("They hid their server")
 			return
 		end
-		if tostring(game.JobId) == tostring(jobId) then
+		jobId = tostring(jobId)
+		if tostring(game.JobId) == jobId then
 			status.Text = "Already in that server"
 			notify("Already in that server")
 			return
 		end
 
+		local function tryTP(pid, jid)
+			pid = tonumber(pid)
+			jid = tostring(jid)
+			if not pid or jid == "" then
+				return false, "bad ids"
+			end
+			-- Client must not pass Player as 3rd arg (that 773-restricts)
+			local ok1, e1 = pcall(function()
+				local opt = Instance.new("TeleportOptions")
+				opt.ServerInstanceId = jid
+				TeleportService:TeleportAsync(pid, { LP }, opt)
+			end)
+			if ok1 then
+				return true
+			end
+			local ok2, e2 = pcall(function()
+				TeleportService:TeleportToPlaceInstance(pid, jid)
+			end)
+			if ok2 then
+				return true
+			end
+			return false, tostring(e1 or e2)
+		end
+
 		status.Text = "Joining " .. name .. "..."
 		notify("Joining " .. name .. "'s server")
-		local okTp, err = pcall(function()
-			TeleportService:TeleportToPlaceInstance(tonumber(placeId), tostring(jobId), LP)
+
+		-- Warm the join ticket the website uses
+		pcall(function()
+			httpReq("https://gamejoin.roblox.com/v1/join-game-instance", "POST", HttpService:JSONEncode({
+				placeId = placeId,
+				gameId = jobId,
+				isTeleport = true,
+			}))
 		end)
+
+		local okTp, tpErr = tryTP(placeId, jobId)
+		if not okTp and rootPlaceId and rootPlaceId ~= placeId then
+			okTp, tpErr = tryTP(rootPlaceId, jobId)
+		end
 		if not okTp then
-			status.Text = "Teleport failed"
-			notify(tostring(err):sub(1, 50))
+			local link = "roblox://experiences/start?placeId=" .. tostring(placeId) .. "&gameInstanceId=" .. jobId
+			pcall(function()
+				if setclipboard then
+					setclipboard(link)
+				end
+			end)
+			status.Text = "Restricted — copied join link"
+			notify("Teleport blocked. Join link copied if clipboard works.")
+			print("[VOIDZ SNIPE] " .. tostring(tpErr))
+			print("[VOIDZ SNIPE] " .. link)
 		end
 	end)
 end
