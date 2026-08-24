@@ -277,6 +277,9 @@ local function looksLikeJobId(s)
 	if #s < 32 then
 		return false
 	end
+	if s == "00000000-0000-0000-0000-000000000000" then
+		return false
+	end
 	return string.find(s, "%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x") ~= nil
 end
 
@@ -284,22 +287,22 @@ local function presenceFromEngine(uid)
 	local poke, a, b, c, d = pcall(function()
 		return TeleportService:GetPlayerPlaceInstanceAsync(uid)
 	end)
+	print("[VOIDZ SNIPE] engine", poke, a, b, c, d)
 	if not poke then
 		return nil
 	end
 	local placeId, jobId
-	if a == true and tonumber(c) then
-		placeId = tonumber(c)
-		jobId = tostring(d or b or "")
-	elseif looksLikeJobId(tostring(a)) and tonumber(c) then
-		placeId = tonumber(c)
-		jobId = tostring(a)
-	elseif tonumber(c) then
-		placeId = tonumber(c)
-		jobId = tostring(d or a or "")
-	elseif tonumber(a) then
-		placeId = tonumber(a)
-		jobId = tostring(b or "")
+	local vals = { a, b, c, d }
+	for i = 1, #vals do
+		local v = vals[i]
+		if looksLikeJobId(tostring(v or "")) then
+			jobId = tostring(v)
+		else
+			local n = tonumber(v)
+			if n and n > 10000 then
+				placeId = n
+			end
+		end
 	end
 	if not placeId then
 		return nil
@@ -466,84 +469,121 @@ local function runMacOpen(url)
 	end)
 end
 
-local function nativeLaunch(placeId, jobId)
-	placeId = tostring(placeId)
-	jobId = tostring(jobId)
-	local proto = "roblox://experiences/start?placeId=" .. placeId .. "&gameInstanceId=" .. jobId
-	local web = "https://www.roblox.com/games/start?placeId=" .. placeId .. "&gameInstanceId=" .. jobId
-	copyText(web)
-	runMacOpen(proto)
-	runMacOpen(web)
+local lastSnipeUid = nil
+
+local function fireUrl(url)
+	url = tostring(url or "")
+	if url == "" then
+		return
+	end
+	runMacOpen(url)
 	pcall(function()
 		if syn and syn.open_url then
-			syn.open_url(proto)
-			syn.open_url(web)
+			syn.open_url(url)
 		end
-	end)
-	pcall(function()
-		game:GetService("GuiService"):OpenBrowserWindow(web)
 	end)
 	pcall(function()
 		if typeof(open_url) == "function" then
-			open_url(proto)
+			open_url(url)
 		end
 	end)
-	return web, proto
+	pcall(function()
+		game:GetService("GuiService"):OpenBrowserWindow(url)
+	end)
 end
 
-local function joinJob(placeId, jobId, status, universeId)
+-- MacSploit cannot reliably TeleportService into another game (773).
+-- Opening the join URL then shutting down is what actually hops you in.
+local function nativeLaunch(placeId, jobId, userId)
 	placeId = tonumber(placeId)
+	userId = tonumber(userId) or tonumber(lastSnipeUid)
 	jobId = tostring(jobId or ""):gsub("%s+", "")
-	if not placeId then
-		status.Text = "Need a PlaceId"
-		return
-	end
 	if not looksLikeJobId(jobId) then
-		status.Text = "JobId must be a server GUID"
-		notify("Bad JobId")
-		return
+		jobId = nil
 	end
-	if tostring(game.JobId) == jobId then
-		status.Text = "Already in that JobId"
-		return
-	end
-
-	status.Text = "Joining JobId..."
-	notify("Joining " .. jobId)
-
-	pcall(function()
-		httpReq("https://gamejoin.roblox.com/v1/join-game-instance", "POST", HttpService:JSONEncode({
-			placeId = placeId,
-			gameId = jobId,
-			isTeleport = true,
-			gameJoinAttemptId = HttpService:GenerateGUID(false),
-		}))
-	end)
-
-	local sameGame = tonumber(universeId) and tonumber(universeId) == tonumber(game.GameId)
-	if not universeId then
-		sameGame = tonumber(placeId) == tonumber(game.PlaceId)
-	end
-
-	-- Same experience: in-game teleport is allowed.
-	-- Other games: TeleportService is 773 (third-party / restricted). Use roblox:// instead.
-	if sameGame then
-		local ok = pcall(function()
-			TeleportService:TeleportToPlaceInstance(placeId, jobId)
-		end)
-		if ok then
-			return
+	-- Most specific first so Roblox doesn't eat a weaker follow URL.
+	local urls = {}
+	if placeId and jobId then
+		table.insert(urls, "roblox://experiences/start?placeId=" .. tostring(placeId) .. "&gameInstanceId=" .. jobId)
+		table.insert(urls, "https://www.roblox.com/games/start?placeId=" .. tostring(placeId) .. "&gameInstanceId=" .. jobId)
+		if userId then
+			table.insert(urls, "roblox://experiences/start?placeId=" .. tostring(placeId) .. "&gameInstanceId=" .. jobId .. "&userId=" .. tostring(userId))
 		end
+	elseif userId then
+		local u = "userId=" .. tostring(userId)
+		if placeId then
+			u = "placeId=" .. tostring(placeId) .. "&" .. u
+		end
+		table.insert(urls, "roblox://experiences/start?" .. u)
+		table.insert(urls, "https://www.roblox.com/games/start?" .. u)
+	elseif placeId then
+		table.insert(urls, "roblox://experiences/start?placeId=" .. tostring(placeId))
+		table.insert(urls, "https://www.roblox.com/games/start?placeId=" .. tostring(placeId))
 	end
+	if #urls == 0 then
+		return nil
+	end
+	copyText(urls[#urls] or urls[1])
+	for i = 1, #urls do
+		fireUrl(urls[i])
+	end
+	return urls[1]
+end
 
-	nativeLaunch(placeId, jobId)
-	status.Text = "Leave this game — Roblox will join them on next launch..."
-	notify("Leaving so Roblox can join their server")
-	task.delay(0.6, function()
+local function hopOut()
+	task.delay(1.35, function()
 		pcall(function()
 			game:Shutdown()
 		end)
 	end)
+end
+
+local function joinJob(placeId, jobId, status, universeId, userId)
+	placeId = tonumber(placeId)
+	userId = tonumber(userId) or tonumber(lastSnipeUid)
+	jobId = tostring(jobId or ""):gsub("%s+", "")
+	if not looksLikeJobId(jobId) then
+		jobId = nil
+	end
+	if not placeId and not userId then
+		status.Text = "Need a PlaceId or username"
+		return
+	end
+	if jobId and tostring(game.JobId) == jobId then
+		status.Text = "Already in that JobId"
+		return
+	end
+
+	if jobId then
+		status.Text = "Joining their server..."
+		notify("Joining " .. jobId)
+	else
+		status.Text = "Following them into Roblox..."
+		notify("Follow join")
+	end
+
+	-- Same experience *might* teleport in-place. Do not trust pcall as success —
+	-- it often throws nothing and never moves you.
+	if jobId and placeId then
+		local sameGame = tonumber(universeId) and tonumber(universeId) == tonumber(game.GameId)
+		if not universeId then
+			sameGame = tonumber(placeId) == tonumber(game.PlaceId)
+		end
+		if sameGame then
+			pcall(function()
+				TeleportService:TeleportToPlaceInstance(placeId, jobId)
+			end)
+		end
+	end
+
+	local opened = nativeLaunch(placeId, jobId, userId)
+	if not opened then
+		status.Text = "Nothing to open — snipe a user first"
+		return
+	end
+	status.Text = "Closing Roblox so it can join them on relaunch..."
+	notify("Leaving so Roblox can join their server")
+	hopOut()
 end
 
 local function snipeName(name, status, jobBox, placeBox, gameLbl)
@@ -574,6 +614,7 @@ local function snipeName(name, status, jobBox, placeBox, gameLbl)
 		end
 
 		status.Text = "Checking if they're in a game..."
+		lastSnipeUid = uid
 		local pres = readPresence(uid, name)
 		local ptype = tonumber(pres.ptype)
 		local placeId = tonumber(pres.placeId)
@@ -587,51 +628,37 @@ local function snipeName(name, status, jobBox, placeBox, gameLbl)
 			.. " job=" .. tostring(jobId and "yes" or "no")
 			.. " src=" .. tostring(pres.source))
 
-		if ptype == 2 and placeId then
-			local gname = pres.lastLocation
-			if type(gname) ~= "string" or gname == "" or gname == "Website" then
-				gname = gameNameFromIds(pres.universeId, placeId)
-			end
-			gname = gname or ("Place " .. tostring(placeId))
-			if gameLbl then
-				gameLbl.Text = "Game  ·  " .. gname
-			end
-			notify(name .. " is in " .. gname)
-			if not jobId then
-				status.Text = "In " .. gname .. " — no JobId (privacy)"
-				placeBox.Text = tostring(placeId)
-				return
-			end
-			jobBox.Text = tostring(jobId)
+		if placeId then
 			placeBox.Text = tostring(placeId)
-			copyText(tostring(jobId))
-			status.Text = "In " .. gname .. " — JobId copied, joining..."
-			joinJob(placeId, jobId, status, pres.universeId)
-			return
+		end
+		if jobId then
+			jobBox.Text = tostring(jobId)
 		end
 
-		if ptype == 1 then
-			status.Text = name .. " is on the website, not in a game"
-			if gameLbl then gameLbl.Text = "Game  ·  Roblox website" end
-			return
+		local gname = pres.lastLocation
+		if type(gname) ~= "string" or gname == "" or gname == "Website" then
+			gname = gameNameFromIds(pres.universeId, placeId)
 		end
 		if ptype == 3 then
-			status.Text = name .. " is in Studio"
 			if gameLbl then gameLbl.Text = "Game  ·  Roblox Studio" end
+			status.Text = name .. " is in Studio"
 			return
 		end
-		if ptype == 4 then
-			status.Text = name .. " is invisible — Roblox hides their game"
-			if gameLbl then gameLbl.Text = "Game  ·  invisible" end
-			return
+		if ptype == 1 and not placeId and not jobId then
+			if gameLbl then gameLbl.Text = "Game  ·  Roblox website" end
+			status.Text = name .. " is on the website — still trying follow join"
+		elseif gname and gname ~= "Website" then
+			if gameLbl then gameLbl.Text = "Game  ·  " .. gname end
+		elseif placeId then
+			gname = gname or ("Place " .. tostring(placeId))
+			if gameLbl then gameLbl.Text = "Game  ·  " .. gname end
+		else
+			if gameLbl then gameLbl.Text = "Game  ·  following user" end
 		end
-		if ptype == 0 then
-			status.Text = name .. " looks offline (or hides presence) — try again if they're in a game"
-			if gameLbl then gameLbl.Text = "Game  ·  hidden / offline" end
-			return
-		end
-		status.Text = name .. " is not in a joinable game"
-		if gameLbl then gameLbl.Text = "Game  ·  unknown" end
+
+		-- Always follow-join. Missing JobId is normal when privacy is on;
+		-- userId deep links still put you in their server when Roblox allows it.
+		joinJob(placeId, jobId, status, pres.universeId, uid)
 	end)
 end
 
@@ -1314,7 +1341,7 @@ local function buildSnipeUi()
 		end
 	end)
 	goJob.MouseButton1Click:Connect(function()
-		joinJob(placeBox.Text, jobBox.Text, statusRef)
+		joinJob(placeBox.Text, jobBox.Text, statusRef, nil, lastSnipeUid)
 	end)
 	copyJob.MouseButton1Click:Connect(function()
 		if jobBox.Text ~= "" then
@@ -1323,17 +1350,11 @@ local function buildSnipeUi()
 		end
 	end)
 	openBtn.MouseButton1Click:Connect(function()
-		if not looksLikeJobId(jobBox.Text) then
-			setStatus("Snipe or paste a JobId first")
+		if not looksLikeJobId(jobBox.Text) and not lastSnipeUid then
+			setStatus("Snipe a user first")
 			return
 		end
-		nativeLaunch(placeBox.Text, jobBox.Text)
-		setStatus("Leaving so Roblox can join that server...")
-		task.delay(0.6, function()
-			pcall(function()
-				game:Shutdown()
-			end)
-		end)
+		joinJob(placeBox.Text, jobBox.Text, statusRef, nil, lastSnipeUid)
 	end)
 
 	local dragging, startIn, startPos, startShadow
