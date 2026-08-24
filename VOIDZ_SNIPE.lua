@@ -118,7 +118,36 @@ pcall(function()
 	end)
 end)
 
-local function joinJob(placeId, jobId, status)
+local function nativeLaunch(placeId, jobId)
+	placeId = tostring(placeId)
+	jobId = tostring(jobId)
+	local proto = "roblox://experiences/start?placeId=" .. placeId .. "&gameInstanceId=" .. jobId
+	local web = "https://www.roblox.com/games/start?placeId=" .. placeId .. "&gameInstanceId=" .. jobId
+	copyText(web)
+	-- Mac: open the Roblox app to that instance (bypasses TeleportService 773)
+	pcall(function()
+		os.execute('open "' .. proto .. '"')
+	end)
+	pcall(function()
+		os.execute("open '" .. proto .. "'")
+	end)
+	pcall(function()
+		if syn and syn.open_url then
+			syn.open_url(proto)
+		end
+	end)
+	pcall(function()
+		if fluxus and fluxus.open_url then
+			fluxus.open_url(proto)
+		end
+	end)
+	pcall(function()
+		game:GetService("GuiService"):OpenBrowserWindow(web)
+	end)
+	return web
+end
+
+local function joinJob(placeId, jobId, status, universeId)
 	placeId = tonumber(placeId)
 	jobId = tostring(jobId or ""):gsub("%s+", "")
 	if not placeId then
@@ -138,7 +167,6 @@ local function joinJob(placeId, jobId, status)
 	status.Text = "Joining JobId..."
 	notify("Joining " .. jobId)
 
-	-- Website join ticket (uses your Roblox cookie via request())
 	pcall(function()
 		httpReq("https://gamejoin.roblox.com/v1/join-game-instance", "POST", HttpService:JSONEncode({
 			placeId = placeId,
@@ -148,25 +176,25 @@ local function joinJob(placeId, jobId, status)
 		}))
 	end)
 
-	-- 773 happens if you pass LocalPlayer as the 3rd argument.
-	local ok, err = pcall(function()
-		TeleportService:TeleportToPlaceInstance(placeId, jobId)
-	end)
-	if ok then
-		return
+	local sameGame = tonumber(universeId) and tonumber(universeId) == tonumber(game.GameId)
+	if not universeId then
+		sameGame = tonumber(placeId) == tonumber(game.PlaceId)
 	end
-	ok, err = pcall(function()
-		local opt = Instance.new("TeleportOptions")
-		opt.ServerInstanceId = jobId
-		TeleportService:TeleportAsync(placeId, { LP }, opt)
-	end)
-	if not ok then
-		local link = "https://www.roblox.com/games/start?placeId=" .. tostring(placeId) .. "&gameInstanceId=" .. jobId
-		copyText(link)
-		status.Text = "773 blocked — join link copied"
-		notify(tostring(err):sub(1, 60))
-		print("[VOIDZ SNIPE] " .. link)
+
+	-- Same experience: in-game teleport is allowed.
+	-- Other games: TeleportService is 773 (third-party / restricted). Use roblox:// instead.
+	if sameGame then
+		local ok = pcall(function()
+			TeleportService:TeleportToPlaceInstance(placeId, jobId)
+		end)
+		if ok then
+			return
+		end
 	end
+
+	local web = nativeLaunch(placeId, jobId)
+	status.Text = "Opened Roblox join (773 bypass). Link copied."
+	print("[VOIDZ SNIPE] " .. web)
 end
 
 local function snipeName(name, status, jobBox, placeBox, gameLbl)
@@ -268,7 +296,7 @@ local function snipeName(name, status, jobBox, placeBox, gameLbl)
 		placeBox.Text = tostring(placeId)
 		copyText(tostring(jobId))
 		status.Text = "In " .. gname .. " — JobId copied, joining..."
-		joinJob(placeId, jobId, status)
+		joinJob(placeId, jobId, status, pres.universeId)
 	end)
 end
 
