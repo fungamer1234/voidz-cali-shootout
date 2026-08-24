@@ -32,22 +32,65 @@ end
 
 local function httpReq(url, method, body)
 	local req = request or http_request or (syn and syn.request) or (http and http.request)
-	if type(req) ~= "function" then
-		return nil
+	if type(req) == "function" then
+		local opts = {
+			Url = url,
+			Method = method or "GET",
+			Headers = {
+				["Content-Type"] = "application/json",
+				["Accept"] = "application/json",
+			},
+		}
+		if body then
+			opts.Body = body
+		end
+		local ok, res = pcall(req, opts)
+		if ok and type(res) == "table" then
+			return res.Body or res.body
+		end
 	end
-	local ok, res = pcall(req, {
-		Url = url,
-		Method = method or "POST",
-		Headers = {
-			["Content-Type"] = "application/json",
-			["Accept"] = "application/json",
-		},
-		Body = body,
-	})
-	if not ok or type(res) ~= "table" then
-		return nil
+	if (method or "GET") == "GET" then
+		local ok, body2 = pcall(function()
+			return game:HttpGet(url)
+		end)
+		if ok and type(body2) == "string" then
+			return body2
+		end
 	end
-	return res.Body or res.body
+	return nil
+end
+
+local function gameNameFromIds(universeId, placeId)
+	universeId = tonumber(universeId)
+	placeId = tonumber(placeId)
+	if universeId then
+		local raw = httpReq("https://games.roblox.com/v1/games?universeIds=" .. tostring(universeId), "GET")
+			or httpReq("https://games.roproxy.com/v1/games?universeIds=" .. tostring(universeId), "GET")
+		if type(raw) == "string" then
+			local ok, data = pcall(function()
+				return HttpService:JSONDecode(raw)
+			end)
+			if ok and data and data.data and data.data[1] and data.data[1].name then
+				return tostring(data.data[1].name)
+			end
+		end
+	end
+	if placeId then
+		local raw = httpReq("https://games.roblox.com/v1/games/multiget-place-details?placeIds=" .. tostring(placeId), "GET")
+			or httpReq("https://games.roproxy.com/v1/games/multiget-place-details?placeIds=" .. tostring(placeId), "GET")
+		if type(raw) == "string" then
+			local ok, data = pcall(function()
+				return HttpService:JSONDecode(raw)
+			end)
+			if ok and type(data) == "table" then
+				local row = data[1] or (data.data and data.data[1])
+				if row and (row.name or row.Name) then
+					return tostring(row.name or row.Name)
+				end
+			end
+		end
+	end
+	return nil
 end
 
 local function looksLikeJobId(s)
@@ -126,7 +169,7 @@ local function joinJob(placeId, jobId, status)
 	end
 end
 
-local function snipeName(name, status, jobBox, placeBox)
+local function snipeName(name, status, jobBox, placeBox, gameLbl)
 	name = tostring(name or ""):gsub("^%s+", ""):gsub("%s+$", "")
 	if name == "" then
 		status.Text = "Type a username"
@@ -184,20 +227,47 @@ local function snipeName(name, status, jobBox, placeBox)
 			jobId = nil
 		end
 
-		if ptype ~= 2 or not placeId then
-			status.Text = name .. " is not in a game"
+		if ptype == 0 then
+			status.Text = name .. " is offline"
+			if gameLbl then gameLbl.Text = "Game: offline" end
 			return
 		end
+		if ptype == 1 then
+			status.Text = name .. " is on the website, not in a game"
+			if gameLbl then gameLbl.Text = "Game: Roblox website" end
+			return
+		end
+		if ptype == 3 then
+			status.Text = name .. " is in Studio"
+			if gameLbl then gameLbl.Text = "Game: Roblox Studio" end
+			return
+		end
+		if ptype ~= 2 or not placeId then
+			status.Text = name .. " is not in a game"
+			if gameLbl then gameLbl.Text = "Game: unknown" end
+			return
+		end
+
+		local gname = pres.lastLocation
+		if type(gname) ~= "string" or gname == "" then
+			gname = gameNameFromIds(pres.universeId, placeId)
+		end
+		gname = gname or ("Place " .. tostring(placeId))
+		if gameLbl then
+			gameLbl.Text = "Game: " .. gname
+		end
+		notify(name .. " is in " .. gname)
+
 		if not jobId then
-			status.Text = "No JobId (join privacy / friends-only)"
-			notify("They hid the server. JobId is not given to non-friends.")
+			status.Text = "In " .. gname .. " — no JobId (privacy)"
+			placeBox.Text = tostring(placeId)
 			return
 		end
 
 		jobBox.Text = tostring(jobId)
 		placeBox.Text = tostring(placeId)
 		copyText(tostring(jobId))
-		status.Text = "JobId copied — joining..."
+		status.Text = "In " .. gname .. " — JobId copied, joining..."
 		joinJob(placeId, jobId, status)
 	end)
 end
@@ -210,7 +280,7 @@ sg.DisplayOrder = 999999
 sg.Parent = pg
 
 local card = Instance.new("Frame")
-card.Size = UDim2.fromOffset(340, 292)
+card.Size = UDim2.fromOffset(340, 314)
 card.Position = UDim2.new(0.5, -170, 0.14, 0)
 card.BackgroundColor3 = Color3.fromRGB(18, 12, 32)
 card.BorderSizePixel = 0
@@ -307,13 +377,24 @@ do
 	c.Parent = goName
 end
 
-lab("PlaceId  /  JobId  (filled after snipe, or paste)", 116)
-local placeBox = boxAt(132, "PlaceId", tostring(game.PlaceId))
-local jobBox = boxAt(164, "JobId (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)", "")
+local gameLbl = Instance.new("TextLabel")
+gameLbl.BackgroundTransparency = 1
+gameLbl.Size = UDim2.new(1, -24, 0, 18)
+gameLbl.Position = UDim2.fromOffset(12, 114)
+gameLbl.Font = Enum.Font.SourceSansBold
+gameLbl.TextSize = 14
+gameLbl.TextColor3 = Color3.fromRGB(255, 220, 140)
+gameLbl.TextXAlignment = Enum.TextXAlignment.Left
+gameLbl.Text = "Game: —"
+gameLbl.Parent = card
+
+lab("PlaceId  /  JobId  (filled after snipe, or paste)", 134)
+local placeBox = boxAt(150, "PlaceId", tostring(game.PlaceId))
+local jobBox = boxAt(182, "JobId (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)", "")
 
 local goJob = Instance.new("TextButton")
 goJob.Size = UDim2.new(0.48, -8, 0, 30)
-goJob.Position = UDim2.fromOffset(12, 198)
+goJob.Position = UDim2.fromOffset(12, 216)
 goJob.BackgroundColor3 = Color3.fromRGB(90, 70, 180)
 goJob.Text = "Join JobId"
 goJob.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -328,7 +409,7 @@ end
 
 local copyJob = Instance.new("TextButton")
 copyJob.Size = UDim2.new(0.48, -8, 0, 30)
-copyJob.Position = UDim2.new(0.52, 4, 0, 198)
+copyJob.Position = UDim2.new(0.52, 4, 0, 216)
 copyJob.BackgroundColor3 = Color3.fromRGB(50, 40, 90)
 copyJob.Text = "Copy JobId"
 copyJob.TextColor3 = Color3.fromRGB(230, 210, 255)
@@ -344,7 +425,7 @@ end
 local status = Instance.new("TextLabel")
 status.BackgroundTransparency = 1
 status.Size = UDim2.new(1, -24, 0, 36)
-status.Position = UDim2.fromOffset(12, 234)
+status.Position = UDim2.fromOffset(12, 252)
 status.Font = Enum.Font.SourceSans
 status.TextSize = 13
 status.TextColor3 = Color3.fromRGB(210, 196, 255)
@@ -355,11 +436,11 @@ status.Text = "Snipe fills PlaceId + JobId. Friends-only privacy = no JobId. Rig
 status.Parent = card
 
 goName.MouseButton1Click:Connect(function()
-	snipeName(nameBox.Text, status, jobBox, placeBox)
+	snipeName(nameBox.Text, status, jobBox, placeBox, gameLbl)
 end)
 nameBox.FocusLost:Connect(function(enter)
 	if enter then
-		snipeName(nameBox.Text, status, jobBox, placeBox)
+		snipeName(nameBox.Text, status, jobBox, placeBox, gameLbl)
 	end
 end)
 goJob.MouseButton1Click:Connect(function()
