@@ -106,13 +106,48 @@ local function cookieHeader()
 	return found
 end
 
+local function cookieTable()
+	local tries = {
+		function()
+			return getcookies(".roblox.com")
+		end,
+		function()
+			return getcookies("https://www.roblox.com")
+		end,
+		function()
+			return getcookies("roblox.com")
+		end,
+	}
+	for i = 1, #tries do
+		local ok, res = pcall(tries[i])
+		if ok and type(res) == "table" then
+			return res
+		end
+	end
+	return nil
+end
+
 local function httpReq(url, method, body)
 	method = method or "GET"
 	local req = request or http_request or (syn and syn.request) or (http and http.request)
 	local cookie = cookieHeader()
+	local cookies = cookieTable()
 	if type(req) == "function" then
-		local variants = {
-			{
+		local variants = {}
+		if cookies then
+			table.insert(variants, {
+				Url = url,
+				Method = method,
+				Body = body,
+				Headers = {
+					["Content-Type"] = "application/json",
+					["Accept"] = "application/json",
+				},
+				Cookies = cookies,
+			})
+		end
+		if type(cookie) == "string" then
+			table.insert(variants, {
 				Url = url,
 				Method = method,
 				Body = body,
@@ -121,25 +156,22 @@ local function httpReq(url, method, body)
 					["Accept"] = "application/json",
 					["Cookie"] = cookie,
 				},
-			},
-			{
-				Url = url,
-				Method = method,
-				Body = body,
-				Headers = {
-					["Content-Type"] = "application/json",
-					["Accept"] = "application/json",
-				},
-			},
-			{
-				Url = url,
-				Method = method,
-				Body = body,
-			},
-		}
-		if not cookie then
-			table.remove(variants, 1)
+			})
 		end
+		table.insert(variants, {
+			Url = url,
+			Method = method,
+			Body = body,
+			Headers = {
+				["Content-Type"] = "application/json",
+				["Accept"] = "application/json",
+			},
+		})
+		table.insert(variants, {
+			Url = url,
+			Method = method,
+			Body = body,
+		})
 		for i = 1, #variants do
 			local ok, res = pcall(req, variants[i])
 			if ok and type(res) == "table" then
@@ -211,6 +243,28 @@ local function resolveUserId(name)
 	return nil
 end
 
+local function looksLikeJobId(s)
+	s = tostring(s or "")
+	if #s < 32 then
+		return false
+	end
+	if s == "00000000-0000-0000-0000-000000000000" then
+		return false
+	end
+	return string.find(s, "%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x") ~= nil
+end
+
+local function jobFromRow(row)
+	if type(row) ~= "table" then
+		return nil
+	end
+	local j = row.gameId or row.GameId or row.gameInstanceId or row.GameInstanceId or row.instanceId
+	if looksLikeJobId(j) then
+		return tostring(j)
+	end
+	return nil
+end
+
 local function presenceFromHttp(uid)
 	local payload = HttpService:JSONEncode({ userIds = { uid } })
 	local urls = {
@@ -218,6 +272,7 @@ local function presenceFromHttp(uid)
 		"https://presence.roproxy.com/v1/presence/users",
 	}
 	local best
+	local withJob
 	for i = 1, #urls do
 		local data = decodeJson(httpReq(urls[i], "POST", payload))
 		local list = data and (data.userPresences or data.UserPresences)
@@ -234,12 +289,14 @@ local function presenceFromHttp(uid)
 				local ptype = tonumber(row.userPresenceType or row.UserPresenceType)
 				local placeId = tonumber(row.placeId or row.PlaceId or row.rootPlaceId or row.RootPlaceId)
 				local loc = row.lastLocation or row.LastLocation
-				-- Unauthenticated Roblox always returns type 0 + "Website". Don't treat that as real.
 				local stub = ptype == 0 and (loc == "Website" or loc == "website" or loc == nil or loc == "")
-				if ptype and (not stub or placeId) then
+				if jobFromRow(row) then
+					return row
+				end
+				if not stub then
 					best = row
-					if ptype > 0 or placeId then
-						return row
+					if ptype == 2 or placeId then
+						withJob = withJob or row
 					end
 				elseif not best then
 					best = row
@@ -247,7 +304,7 @@ local function presenceFromHttp(uid)
 			end
 		end
 	end
-	return best
+	return withJob or best
 end
 
 local function presenceFromFriends(uid, name)
@@ -270,17 +327,6 @@ local function presenceFromFriends(uid, name)
 		end
 	end
 	return nil
-end
-
-local function looksLikeJobId(s)
-	s = tostring(s or "")
-	if #s < 32 then
-		return false
-	end
-	if s == "00000000-0000-0000-0000-000000000000" then
-		return false
-	end
-	return string.find(s, "%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x") ~= nil
 end
 
 local function presenceFromEngine(uid)
@@ -358,7 +404,7 @@ local function readPresence(uid, name)
 	if row then
 		local ptype = tonumber(row.userPresenceType or row.UserPresenceType)
 		local placeId = tonumber(row.placeId or row.PlaceId or row.rootPlaceId or row.RootPlaceId)
-		local jobId = row.gameId or row.GameId or row.gameInstanceId
+		local jobId = jobFromRow(row)
 		local loc = row.lastLocation or row.LastLocation
 		local stub = ptype == 0 and (loc == "Website" or loc == "website") and not placeId
 		if not stub then
@@ -471,119 +517,67 @@ end
 
 local lastSnipeUid = nil
 
-local function fireUrl(url)
-	url = tostring(url or "")
-	if url == "" then
-		return
-	end
-	runMacOpen(url)
-	pcall(function()
-		if syn and syn.open_url then
-			syn.open_url(url)
-		end
-	end)
-	pcall(function()
-		if typeof(open_url) == "function" then
-			open_url(url)
-		end
-	end)
-	pcall(function()
-		game:GetService("GuiService"):OpenBrowserWindow(url)
-	end)
-end
-
--- MacSploit cannot reliably TeleportService into another game (773).
--- Opening the join URL then shutting down is what actually hops you in.
-local function nativeLaunch(placeId, jobId, userId)
+-- Non-friends: only placeId + gameInstanceId works. userId follow is friends-only
+-- and was overwriting the good join. Open the link AFTER this client dies.
+local function nativeLaunch(placeId, jobId)
 	placeId = tonumber(placeId)
-	userId = tonumber(userId) or tonumber(lastSnipeUid)
 	jobId = tostring(jobId or ""):gsub("%s+", "")
-	if not looksLikeJobId(jobId) then
-		jobId = nil
-	end
-	-- Most specific first so Roblox doesn't eat a weaker follow URL.
-	local urls = {}
-	if placeId and jobId then
-		table.insert(urls, "roblox://experiences/start?placeId=" .. tostring(placeId) .. "&gameInstanceId=" .. jobId)
-		table.insert(urls, "https://www.roblox.com/games/start?placeId=" .. tostring(placeId) .. "&gameInstanceId=" .. jobId)
-		if userId then
-			table.insert(urls, "roblox://experiences/start?placeId=" .. tostring(placeId) .. "&gameInstanceId=" .. jobId .. "&userId=" .. tostring(userId))
-		end
-	elseif userId then
-		local u = "userId=" .. tostring(userId)
-		if placeId then
-			u = "placeId=" .. tostring(placeId) .. "&" .. u
-		end
-		table.insert(urls, "roblox://experiences/start?" .. u)
-		table.insert(urls, "https://www.roblox.com/games/start?" .. u)
-	elseif placeId then
-		table.insert(urls, "roblox://experiences/start?placeId=" .. tostring(placeId))
-		table.insert(urls, "https://www.roblox.com/games/start?placeId=" .. tostring(placeId))
-	end
-	if #urls == 0 then
+	if not placeId or not looksLikeJobId(jobId) then
 		return nil
 	end
-	copyText(urls[#urls] or urls[1])
-	for i = 1, #urls do
-		fireUrl(urls[i])
-	end
-	return urls[1]
-end
-
-local function hopOut()
-	task.delay(1.35, function()
-		pcall(function()
-			game:Shutdown()
-		end)
+	local proto = "roblox://experiences/start?placeId=" .. tostring(placeId) .. "&gameInstanceId=" .. jobId
+	local web = "https://www.roblox.com/games/start?placeId=" .. tostring(placeId) .. "&gameInstanceId=" .. jobId
+	copyText(web)
+	local bg = "(sleep 2; /usr/bin/open " .. string.format("%q", proto)
+		.. "; sleep 0.4; /usr/bin/open " .. string.format("%q", web)
+		.. ") >/dev/null 2>&1 &"
+	pcall(function()
+		os.execute(bg)
 	end)
+	pcall(function()
+		if getrenv and getrenv().os and getrenv().os.execute then
+			getrenv().os.execute(bg)
+		end
+	end)
+	pcall(function()
+		local f = io.popen(bg)
+		if f then
+			f:close()
+		end
+	end)
+	runMacOpen(proto)
+	runMacOpen(web)
+	print("[VOIDZ SNIPE] join link " .. web)
+	return web
 end
 
-local function joinJob(placeId, jobId, status, universeId, userId)
+local function joinJob(placeId, jobId, status)
 	placeId = tonumber(placeId)
-	userId = tonumber(userId) or tonumber(lastSnipeUid)
 	jobId = tostring(jobId or ""):gsub("%s+", "")
-	if not looksLikeJobId(jobId) then
-		jobId = nil
-	end
-	if not placeId and not userId then
-		status.Text = "Need a PlaceId or username"
+	if not placeId then
+		status.Text = "Need a PlaceId"
 		return
 	end
-	if jobId and tostring(game.JobId) == jobId then
+	if not looksLikeJobId(jobId) then
+		status.Text = "No JobId — they hide servers from non-friends"
+		notify("Can't join without a JobId")
+		return
+	end
+	if tostring(game.JobId) == jobId then
 		status.Text = "Already in that JobId"
 		return
 	end
 
-	if jobId then
-		status.Text = "Joining their server..."
-		notify("Joining " .. jobId)
-	else
-		status.Text = "Following them into Roblox..."
-		notify("Follow join")
-	end
-
-	-- Same experience *might* teleport in-place. Do not trust pcall as success —
-	-- it often throws nothing and never moves you.
-	if jobId and placeId then
-		local sameGame = tonumber(universeId) and tonumber(universeId) == tonumber(game.GameId)
-		if not universeId then
-			sameGame = tonumber(placeId) == tonumber(game.PlaceId)
-		end
-		if sameGame then
-			pcall(function()
-				TeleportService:TeleportToPlaceInstance(placeId, jobId)
-			end)
-		end
-	end
-
-	local opened = nativeLaunch(placeId, jobId, userId)
-	if not opened then
-		status.Text = "Nothing to open — snipe a user first"
-		return
-	end
-	status.Text = "Closing Roblox so it can join them on relaunch..."
+	status.Text = "Joining their server..."
+	notify("Joining " .. jobId)
+	nativeLaunch(placeId, jobId)
+	status.Text = "Closing Roblox — it will join that server next"
 	notify("Leaving so Roblox can join their server")
-	hopOut()
+	task.delay(0.8, function()
+		pcall(function()
+			game:Shutdown()
+		end)
+	end)
 end
 
 local function snipeName(name, status, jobBox, placeBox, gameLbl)
@@ -616,6 +610,13 @@ local function snipeName(name, status, jobBox, placeBox, gameLbl)
 		status.Text = "Checking if they're in a game..."
 		lastSnipeUid = uid
 		local pres = readPresence(uid, name)
+		local tries = 0
+		while tries < 3 and not looksLikeJobId(pres.jobId) do
+			tries = tries + 1
+			status.Text = "Retrying JobId (" .. tostring(tries) .. "/3)..."
+			task.wait(0.4)
+			pres = readPresence(uid, name)
+		end
 		local ptype = tonumber(pres.ptype)
 		local placeId = tonumber(pres.placeId)
 		local jobId = pres.jobId
@@ -644,21 +645,22 @@ local function snipeName(name, status, jobBox, placeBox, gameLbl)
 			status.Text = name .. " is in Studio"
 			return
 		end
-		if ptype == 1 and not placeId and not jobId then
-			if gameLbl then gameLbl.Text = "Game  ·  Roblox website" end
-			status.Text = name .. " is on the website — still trying follow join"
-		elseif gname and gname ~= "Website" then
+		if gname and gname ~= "Website" then
 			if gameLbl then gameLbl.Text = "Game  ·  " .. gname end
 		elseif placeId then
-			gname = gname or ("Place " .. tostring(placeId))
-			if gameLbl then gameLbl.Text = "Game  ·  " .. gname end
-		else
-			if gameLbl then gameLbl.Text = "Game  ·  following user" end
+			if gameLbl then gameLbl.Text = "Game  ·  Place " .. tostring(placeId) end
 		end
 
-		-- Always follow-join. Missing JobId is normal when privacy is on;
-		-- userId deep links still put you in their server when Roblox allows it.
-		joinJob(placeId, jobId, status, pres.universeId, uid)
+		if not jobId or not placeId then
+			if gameLbl and not placeId then
+				gameLbl.Text = "Game  ·  no server id"
+			end
+			status.Text = "No JobId — they hide servers from non-friends"
+			notify("Need a JobId to join non-friends")
+			return
+		end
+		status.Text = "In " .. tostring(gname or placeId) .. " — opening join link..."
+		joinJob(placeId, jobId, status)
 	end)
 end
 
@@ -1341,7 +1343,7 @@ local function buildSnipeUi()
 		end
 	end)
 	goJob.MouseButton1Click:Connect(function()
-		joinJob(placeBox.Text, jobBox.Text, statusRef, nil, lastSnipeUid)
+		joinJob(placeBox.Text, jobBox.Text, statusRef)
 	end)
 	copyJob.MouseButton1Click:Connect(function()
 		if jobBox.Text ~= "" then
@@ -1350,11 +1352,7 @@ local function buildSnipeUi()
 		end
 	end)
 	openBtn.MouseButton1Click:Connect(function()
-		if not looksLikeJobId(jobBox.Text) and not lastSnipeUid then
-			setStatus("Snipe a user first")
-			return
-		end
-		joinJob(placeBox.Text, jobBox.Text, statusRef, nil, lastSnipeUid)
+		joinJob(placeBox.Text, jobBox.Text, statusRef)
 	end)
 
 	local dragging, startIn, startPos, startShadow
