@@ -661,6 +661,7 @@ local function buildSnipeUi()
 
 	task.spawn(function()
 		local urls = {
+			"https://raw.githubusercontent.com/fungamer1234/voidz-cali-shootout/f77d8149d2fd25368eec95aa17f67cb0894c0bf2/voidz_logo.png",
 			"https://raw.githubusercontent.com/fungamer1234/voidz-cali-shootout/main/voidz_logo.png",
 			"https://cdn.jsdelivr.net/gh/fungamer1234/voidz-cali-shootout@main/voidz_logo.png",
 		}
