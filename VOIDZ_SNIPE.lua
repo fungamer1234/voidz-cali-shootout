@@ -211,7 +211,13 @@ local function joinJob(placeId, jobId, status, universeId)
 	end
 
 	nativeLaunch(placeId, jobId)
-	status.Text = "Tried OPEN IN ROBLOX. If it didn't hop, click the green button or paste the copied link in Safari."
+	status.Text = "Leave this game — Roblox will join them on next launch..."
+	notify("Leaving so Roblox can join their server")
+	task.delay(0.6, function()
+		pcall(function()
+			game:Shutdown()
+		end)
+	end)
 end
 
 local function snipeName(name, status, jobBox, placeBox, gameLbl)
@@ -492,7 +498,7 @@ status.TextColor3 = Color3.fromRGB(210, 196, 255)
 status.TextXAlignment = Enum.TextXAlignment.Left
 status.TextYAlignment = Enum.TextYAlignment.Top
 status.TextWrapped = true
-status.Text = "Snipe fills PlaceId + JobId. Friends-only privacy = no JobId. RightShift hide."
+status.Text = "Snipe → leaves this game → Roblox joins their server. RightShift hide."
 status.Parent = card
 
 goName.MouseButton1Click:Connect(function()
@@ -518,7 +524,12 @@ openBtn.MouseButton1Click:Connect(function()
 		return
 	end
 	nativeLaunch(placeBox.Text, jobBox.Text)
-	status.Text = "Tried to open Roblox. If nothing happens, paste the copied link in Safari."
+	status.Text = "Leaving this game so Roblox can join that JobId..."
+	task.delay(0.6, function()
+		pcall(function()
+			game:Shutdown()
+		end)
+	end)
 end)
 
 local dragging, startIn, startPos
