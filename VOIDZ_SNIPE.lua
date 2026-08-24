@@ -555,20 +555,21 @@ local function buildSnipeUi()
 	headerLine.Parent = header
 
 	local mark = Instance.new("Frame")
-	mark.Size = UDim2.fromOffset(30, 30)
-	mark.Position = UDim2.fromOffset(14, 12)
-	mark.BackgroundColor3 = C.accent
+	mark.Size = UDim2.fromOffset(36, 36)
+	mark.Position = UDim2.fromOffset(12, 9)
+	mark.BackgroundColor3 = Color3.new(0, 0, 0)
 	mark.BorderSizePixel = 0
+	mark.ClipsDescendants = true
 	mark.ZIndex = 7
 	mark.Parent = header
-	corner(mark, 9)
-	stroke(mark, C.accent2, 1, 0.42)
+	corner(mark, 10)
+	stroke(mark, C.accent2, 1.2, 0.28)
 	local markScale = Instance.new("UIScale")
 	markScale.Scale = 1
 	markScale.Parent = mark
 	task.delay(0.6, function()
 		if markScale.Parent then
-			loopTw(markScale, { Scale = 1.07 }, 1.7)
+			loopTw(markScale, { Scale = 1.06 }, 1.7)
 		end
 	end)
 	local mv = Instance.new("TextLabel")
@@ -580,11 +581,102 @@ local function buildSnipeUi()
 	mv.Text = "V"
 	mv.ZIndex = 8
 	mv.Parent = mark
+	local logo = Instance.new("ImageLabel")
+	logo.BackgroundTransparency = 1
+	logo.Size = UDim2.fromScale(1, 1)
+	logo.Image = ""
+	logo.ScaleType = Enum.ScaleType.Crop
+	logo.ZIndex = 9
+	logo.Parent = mark
+	corner(logo, 10)
+
+	local function httpBytes(url)
+		local req = request or http_request or (syn and syn.request) or (http and http.request)
+		if type(req) == "function" then
+			local ok, res = pcall(req, { Url = url, Method = "GET" })
+			if ok and type(res) == "table" then
+				local body = res.Body or res.body
+				if type(body) == "string" and #body > 64 then
+					return body
+				end
+			end
+		end
+		local ok, body = pcall(function()
+			return game:HttpGet(url)
+		end)
+		if ok and type(body) == "string" and #body > 64 then
+			return body
+		end
+		return nil
+	end
+
+	local function applyCustomImage(imageLabel, bytes, fileName)
+		if type(bytes) ~= "string" or #bytes < 64 then
+			return false
+		end
+		if bytes:sub(1, 4) ~= "\137PNG" then
+			return false
+		end
+		pcall(function()
+			if makefolder and (not isfolder or not isfolder("voidz")) then
+				makefolder("voidz")
+			end
+		end)
+		local path = "voidz/" .. fileName
+		local wrote = pcall(function()
+			writefile(path, bytes)
+		end)
+		if not wrote then
+			path = fileName
+			wrote = pcall(function()
+				writefile(path, bytes)
+			end)
+		end
+		if not wrote then
+			return false
+		end
+		local getters = {
+			function()
+				return getcustomasset(path)
+			end,
+			function()
+				return getcustomasset(path, true)
+			end,
+			function()
+				return syn.getcustomasset(path)
+			end,
+			function()
+				return getcustomasset("voidz/" .. fileName)
+			end,
+		}
+		for i = 1, #getters do
+			local ok, asset = pcall(getters[i])
+			if ok and type(asset) == "string" and asset ~= "" then
+				imageLabel.Image = asset
+				return true
+			end
+		end
+		return false
+	end
+
+	task.spawn(function()
+		local urls = {
+			"https://raw.githubusercontent.com/fungamer1234/voidz-cali-shootout/main/voidz_logo.png",
+			"https://cdn.jsdelivr.net/gh/fungamer1234/voidz-cali-shootout@main/voidz_logo.png",
+		}
+		for i = 1, #urls do
+			local bytes = httpBytes(urls[i])
+			if applyCustomImage(logo, bytes, "voidz_logo.png") then
+				mv.Text = ""
+				return
+			end
+		end
+	end)
 
 	local title = Instance.new("TextLabel")
 	title.BackgroundTransparency = 1
-	title.Size = UDim2.new(1, -90, 0, 16)
-	title.Position = UDim2.fromOffset(52, 10)
+	title.Size = UDim2.new(1, -96, 0, 16)
+	title.Position = UDim2.fromOffset(56, 10)
 	title.Font = Enum.Font.GothamBlack
 	title.TextSize = 14
 	title.TextColor3 = C.text
@@ -596,7 +688,7 @@ local function buildSnipeUi()
 	local sub = Instance.new("TextLabel")
 	sub.BackgroundTransparency = 1
 	sub.Size = UDim2.new(1, -90, 0, 13)
-	sub.Position = UDim2.fromOffset(52, 28)
+	sub.Position = UDim2.fromOffset(56, 28)
 	sub.Font = Enum.Font.GothamMedium
 	sub.TextSize = 10
 	sub.TextColor3 = C.accent2
