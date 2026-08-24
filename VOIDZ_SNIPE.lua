@@ -118,33 +118,51 @@ pcall(function()
 	end)
 end)
 
+local function runMacOpen(url)
+	url = tostring(url or "")
+	local cmd = '/usr/bin/open ' .. string.format("%q", url)
+	pcall(function()
+		os.execute(cmd)
+	end)
+	pcall(function()
+		if getrenv and getrenv().os and getrenv().os.execute then
+			getrenv().os.execute(cmd)
+		end
+	end)
+	pcall(function()
+		local f = io.popen(cmd)
+		if f then
+			f:close()
+		end
+	end)
+	pcall(function()
+		os.execute("/usr/bin/osascript -e 'open location \"" .. url .. "\"'")
+	end)
+end
+
 local function nativeLaunch(placeId, jobId)
 	placeId = tostring(placeId)
 	jobId = tostring(jobId)
 	local proto = "roblox://experiences/start?placeId=" .. placeId .. "&gameInstanceId=" .. jobId
 	local web = "https://www.roblox.com/games/start?placeId=" .. placeId .. "&gameInstanceId=" .. jobId
 	copyText(web)
-	-- Mac: open the Roblox app to that instance (bypasses TeleportService 773)
-	pcall(function()
-		os.execute('open "' .. proto .. '"')
-	end)
-	pcall(function()
-		os.execute("open '" .. proto .. "'")
-	end)
+	runMacOpen(proto)
+	runMacOpen(web)
 	pcall(function()
 		if syn and syn.open_url then
 			syn.open_url(proto)
-		end
-	end)
-	pcall(function()
-		if fluxus and fluxus.open_url then
-			fluxus.open_url(proto)
+			syn.open_url(web)
 		end
 	end)
 	pcall(function()
 		game:GetService("GuiService"):OpenBrowserWindow(web)
 	end)
-	return web
+	pcall(function()
+		if typeof(open_url) == "function" then
+			open_url(proto)
+		end
+	end)
+	return web, proto
 end
 
 local function joinJob(placeId, jobId, status, universeId)
@@ -192,9 +210,8 @@ local function joinJob(placeId, jobId, status, universeId)
 		end
 	end
 
-	local web = nativeLaunch(placeId, jobId)
-	status.Text = "Opened Roblox join (773 bypass). Link copied."
-	print("[VOIDZ SNIPE] " .. web)
+	nativeLaunch(placeId, jobId)
+	status.Text = "Tried OPEN IN ROBLOX. If it didn't hop, click the green button or paste the copied link in Safari."
 end
 
 local function snipeName(name, status, jobBox, placeBox, gameLbl)
@@ -308,7 +325,7 @@ sg.DisplayOrder = 999999
 sg.Parent = pg
 
 local card = Instance.new("Frame")
-card.Size = UDim2.fromOffset(340, 314)
+card.Size = UDim2.fromOffset(340, 348)
 card.Position = UDim2.new(0.5, -170, 0.14, 0)
 card.BackgroundColor3 = Color3.fromRGB(18, 12, 32)
 card.BorderSizePixel = 0
@@ -450,10 +467,25 @@ do
 	c.Parent = copyJob
 end
 
+local openBtn = Instance.new("TextButton")
+openBtn.Size = UDim2.new(1, -24, 0, 30)
+openBtn.Position = UDim2.fromOffset(12, 250)
+openBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 120)
+openBtn.Text = "OPEN IN ROBLOX (bypasses 773)"
+openBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+openBtn.Font = Enum.Font.SourceSansBold
+openBtn.TextSize = 14
+openBtn.Parent = card
+do
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, 8)
+	c.Parent = openBtn
+end
+
 local status = Instance.new("TextLabel")
 status.BackgroundTransparency = 1
 status.Size = UDim2.new(1, -24, 0, 36)
-status.Position = UDim2.fromOffset(12, 252)
+status.Position = UDim2.fromOffset(12, 286)
 status.Font = Enum.Font.SourceSans
 status.TextSize = 13
 status.TextColor3 = Color3.fromRGB(210, 196, 255)
@@ -479,6 +511,14 @@ copyJob.MouseButton1Click:Connect(function()
 		copyText(jobBox.Text)
 		status.Text = "JobId copied"
 	end
+end)
+openBtn.MouseButton1Click:Connect(function()
+	if not looksLikeJobId(jobBox.Text) then
+		status.Text = "Snipe or paste a JobId first"
+		return
+	end
+	nativeLaunch(placeBox.Text, jobBox.Text)
+	status.Text = "Tried to open Roblox. If nothing happens, paste the copied link in Safari."
 end)
 
 local dragging, startIn, startPos
